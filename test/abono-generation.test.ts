@@ -50,7 +50,7 @@ describe.skipIf(!hasSupabaseCreds)('abono-generation: generateAbonoOccurrences',
     // Cliente + abono reales: abono_id es FK a abonos(id), así que la fila DEBE existir para el UPDATE.
     const insClient = await t.admin
       .from('clients')
-      .insert({ business_id: t.businessId, name: 'Cliente Abono', phone: '1122334455', email: 'abono@test.com' })
+      .insert({ business_id: t.businessId, name: 'Cliente Abono', last_name: 'Pérez', phone: '1122334455', email: 'abono@test.com' })
       .select('id')
       .single()
     if (insClient.error || !insClient.data) throw new Error(`seed client: ${insClient.error?.message}`)
@@ -141,7 +141,7 @@ describe.skipIf(!hasSupabaseCreds)('abono-generation: generateAbonoOccurrences',
     // Verificación independiente contra la DB: 5 turnos, en las fechas correctas, a las 10:00, con abono_id.
     const { data: appts } = await t.admin
       .from('appointments')
-      .select('date, time, abono_id')
+      .select('date, time, abono_id, client_name')
       .eq('business_id', t.businessId)
       .eq('abono_id', abonoId)
       .order('date')
@@ -149,6 +149,8 @@ describe.skipIf(!hasSupabaseCreds)('abono-generation: generateAbonoOccurrences',
     expect(appts?.map(a => a.date)).toEqual(MONDAYS)
     expect(appts?.every(a => (a.time as string).slice(0, 5) === START)).toBe(true)
     expect(appts?.every(a => a.abono_id === abonoId)).toBe(true)
+    // Snapshot con el nombre completo del cliente de la serie (quick 261124-lfd, D-07).
+    expect(appts?.every(a => a.client_name === 'Cliente Abono Pérez')).toBe(true)
   })
 
   // (2) Paso por booking-core / no-pisa: un turno ajeno ocupa un slot; esa fecha se saltea (slot_taken),

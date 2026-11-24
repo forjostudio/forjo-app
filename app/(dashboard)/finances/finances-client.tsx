@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TAB_PARAM, TABS_FINANZAS, resolveTab, toqueDeTab } from '@/lib/panel-tabs'
 import { applyPanelView, panelTabCause, resolveViewParam, sanitizeAction, reconciledMemo } from '@/lib/panel-history'
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
+import { clientFullName } from '@/lib/client-name'
 import {
   TrendingUp, TrendingDown, Plus, Pencil, Trash2,
   ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Search, UserPlus, User, X, Receipt, Percent, Award, Activity, Power,
@@ -365,7 +366,7 @@ export function FinancesClient({ businessId }: Props) {
   const clientSearchResults = saleClientSearch.trim().length > 0
     ? clients.filter(c => {
       const q = saleClientSearch.toLowerCase()
-      return c.name.toLowerCase().includes(q) || (c.phone || '').includes(q)
+      return clientFullName(c).toLowerCase().includes(q) || (c.phone || '').includes(q)
     }).slice(0, 6)
     : []
 
@@ -1156,7 +1157,7 @@ export function FinancesClient({ businessId }: Props) {
                   <p className="font-medium truncate">{sale.description}</p>
                   <p className="text-xs text-muted-foreground">
                     {sale.type} · cant. {sale.quantity}
-                    {linkedClient && <span> · <User className="inline w-3 h-3" /> {linkedClient.name}</span>}
+                    {linkedClient && <span> · <User className="inline w-3 h-3" /> {clientFullName(linkedClient)}</span>}
                   </p>
                 </div>
                 <span className="font-semibold">{fmtARS(Number(sale.amount) * Number(sale.quantity))}</span>
@@ -1265,7 +1266,7 @@ export function FinancesClient({ businessId }: Props) {
                   {saleClientSelected ? (
                     <div className="flex items-center gap-2 p-2 rounded bg-secondary/50 text-sm">
                       <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                      <span className="flex-1 font-medium">{saleClientSelected.name}</span>
+                      <span className="flex-1 font-medium">{clientFullName(saleClientSelected)}</span>
                       {saleClientSelected.phone && <span className="text-xs text-muted-foreground">{saleClientSelected.phone}</span>}
                       <button type="button" onClick={() => { setSaleClientSelected(null); setSaleClientSearch('') }}>
                         <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
@@ -1291,7 +1292,7 @@ export function FinancesClient({ businessId }: Props) {
                                 className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-center gap-2"
                                 onClick={() => { setSaleClientSelected(c); setSaleClientSearch('') }}>
                                 <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                                <span className="flex-1">{c.name}</span>
+                                <span className="flex-1">{clientFullName(c)}</span>
                                 {c.phone && <span className="text-xs text-muted-foreground">{c.phone}</span>}
                               </button>
                             ))

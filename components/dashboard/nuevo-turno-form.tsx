@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils'
 import { Calendar } from '@/components/ui/calendar'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { clientFullName } from '@/lib/client-name'
 
 // ── Hook responsive mínimo (sin dependencias) ───────────────────────────────────────────────
 // Dialog y Drawer son portales con estado propio; renderizar uno u otro pide un breakpoint en JS,
@@ -378,7 +379,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
     if (!q) return clients.slice(0, 8)
     return clients
       .filter((c) => {
-        const byName = c.name.toLowerCase().includes(q)
+        const byName = clientFullName(c).toLowerCase().includes(q)
         const byEmail = (c.email || '').toLowerCase().includes(q)
         const byPhone = qDigits.length > 0 && normPhone(c.phone).includes(qDigits)
         return byName || byEmail || byPhone
@@ -402,7 +403,8 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
   }, [creatingClient, newClientContact, clients])
 
   function pickClient(c: Client) {
-    setSelectedClient({ id: c.id, name: c.name, phone: c.phone, email: c.email })
+    // name = nombre completo: viaja como clientName al snapshot appointments.client_name (D-07).
+    setSelectedClient({ id: c.id, name: clientFullName(c), phone: c.phone, email: c.email })
     setCreatingClient(false)
   }
 
@@ -655,7 +657,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
                         onClick={() => pickClient(c)}
                         className="w-full text-left px-3 py-1.5 hover:bg-secondary/60 transition-colors"
                       >
-                        <span className="text-sm font-medium">{c.name}</span>
+                        <span className="text-sm font-medium">{clientFullName(c)}</span>
                         {c.phone && (
                           <span className="block text-xs text-muted-foreground truncate">{c.phone}</span>
                         )}

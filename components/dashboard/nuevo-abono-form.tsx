@@ -34,6 +34,7 @@ import {
 import type { OverlayDismissDetails } from '@/lib/overlay-history'
 import { Plus, Minus, Check, UserPlus, ChevronLeft, Repeat, XIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { clientFullName } from '@/lib/client-name'
 
 // ── Hook responsive mínimo (idéntico al de nuevo-turno-form) ─────────────────────────────────
 // Dialog y Drawer son portales con estado propio; el breakpoint se decide en JS. useSyncExternalStore
@@ -268,7 +269,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
     if (!q) return clients.slice(0, 8)
     return clients
       .filter((c) => {
-        const byName = c.name.toLowerCase().includes(q)
+        const byName = clientFullName(c).toLowerCase().includes(q)
         const byEmail = (c.email || '').toLowerCase().includes(q)
         const byPhone = qDigits.length > 0 && normPhone(c.phone).includes(qDigits)
         return byName || byEmail || byPhone
@@ -292,7 +293,8 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
   }, [creatingClient, newClientContact, clients])
 
   function pickClient(c: Client) {
-    setSelectedClient({ id: c.id, name: c.name, phone: c.phone, email: c.email })
+    // name = nombre completo: viaja como clientName al snapshot appointments.client_name (D-07).
+    setSelectedClient({ id: c.id, name: clientFullName(c), phone: c.phone, email: c.email })
     setCreatingClient(false)
   }
 
@@ -501,7 +503,7 @@ function AbonoFormBody({ onClose, dirtyRef, business, clients, services, profess
                         onClick={() => pickClient(c)}
                         className="w-full text-left px-3 py-1.5 hover:bg-secondary/60 transition-colors"
                       >
-                        <span className="text-sm font-medium">{c.name}</span>
+                        <span className="text-sm font-medium">{clientFullName(c)}</span>
                         {c.phone && <span className="block text-xs text-muted-foreground truncate">{c.phone}</span>}
                         {c.email && <span className="block text-xs text-muted-foreground truncate">{c.email}</span>}
                       </button>

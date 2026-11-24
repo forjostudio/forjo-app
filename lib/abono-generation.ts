@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAppointmentCore } from './booking-core'
+import { clientFullName } from './client-name'
 
 // ── Motor de generación forward del abono (Plan 06-02, ABONO-02) ─────────────────────────
 // Dado un abono (serie recurrente semanal) y un rango de fechas, materializa un turno por cada
@@ -105,8 +106,9 @@ export async function generateAbonoOccurrences(input: GenerateAbonoInput): Promi
   // Ahora sí es un string-compare CONFIABLE: los dos lados ya matchean 'yyyy-MM-dd'.
   if (fromDate > toDate) return { created, skipped }
 
-  // (1) Resolver una vez el cliente de la serie para copiar name/phone/email al core (el core NO
-  // inserta la fila de clients, solo copia campos). Se filtra por business_id (aislamiento, T-06-07).
+  // (1) Resolver una vez el cliente de la serie para copiar nombre completo/phone/email al core (el
+  // core NO inserta la fila de clients, solo copia campos). El client_name de cada ocurrencia es el
+  // NOMBRE COMPLETO (name + last_name vía clientFullName, quick 261124-lfd D-07). Se filtra por business_id (aislamiento, T-06-07).
   // Si el abono no tiene client_id (no debería pasar: el Plan 03 lo garantiza), pasamos name vacío + null.
   let clientName = ''
   let clientPhone: string | null = null
@@ -114,12 +116,12 @@ export async function generateAbonoOccurrences(input: GenerateAbonoInput): Promi
   if (abono.client_id) {
     const { data: client } = await supabase
       .from('clients')
-      .select('name, phone, email')
+      .select('name, last_name, phone, email')
       .eq('id', abono.client_id)
       .eq('business_id', business.id)
       .maybeSingle()
     if (client) {
-      clientName = (client.name as string) || ''
+      clientName = clientFullName(client as { name?: string | null; last_name?: string | null })
       clientPhone = (client.phone as string) ?? null
       clientEmail = (client.email as string) ?? null
     }

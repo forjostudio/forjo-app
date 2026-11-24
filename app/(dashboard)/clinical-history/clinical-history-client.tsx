@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import { Client } from '@/lib/types'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { clientFullName } from '@/lib/client-name'
 import { Search, ChevronLeft, FileText } from 'lucide-react'
 import { ClinicalHistoryPanel } from '@/components/dashboard/clinical-history-panel'
 
@@ -22,7 +23,7 @@ export function ClinicalHistoryClient({ initialClients, businessId }: Props) {
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return clients
-      .filter(c => !q || c.name.toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.email || '').toLowerCase().includes(q))
+      .filter(c => !q || clientFullName(c).toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.email || '').toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name, 'es'))
   }, [clients, search])
 
@@ -71,7 +72,7 @@ export function ClinicalHistoryClient({ initialClients, businessId }: Props) {
                   {client.name.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{client.name}</p>
+                  <p className="text-sm font-medium truncate">{clientFullName(client)}</p>
                   {client.insurance_name && <p className="text-xs text-muted-foreground truncate">{client.insurance_name}</p>}
                 </div>
               </button>
@@ -97,7 +98,7 @@ export function ClinicalHistoryClient({ initialClients, businessId }: Props) {
               <ChevronLeft className="w-4 h-4" /> Volver
             </button>
 
-            <h2 className="text-2xl font-bold tracking-tight uppercase">{selected.name}</h2>
+            <h2 className="text-2xl font-bold tracking-tight uppercase">{clientFullName(selected)}</h2>
 
             <ClinicalHistoryPanel
               clientId={selected.id}

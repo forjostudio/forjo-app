@@ -5,6 +5,7 @@ import {
   type UpcomingAppt,
 } from '@/components/dashboard/upcoming-appointments'
 import type { ImpersonationData } from '@/lib/impersonation'
+import { clientFullName } from '@/lib/client-name'
 
 /**
  * ImpersonationView — superficie VISUAL read-only de la impersonación (D-05/D-12/D-13, IMP-03).
@@ -225,7 +226,7 @@ export function ImpersonationView({ data }: { data: ImpersonationData }) {
             <div className="space-y-2">
               {data.clients.map((c) => (
                 <div key={str(c, 'id')} className="p-3 rounded-lg bg-secondary/50">
-                  <p className="text-sm font-medium truncate">{str(c, 'name')}</p>
+                  <p className="text-sm font-medium truncate">{clientFullName({ name: str(c, 'name'), last_name: str(c, 'last_name') })}</p>
                   <p className="text-xs text-muted-foreground truncate">
                     {[str(c, 'phone'), str(c, 'email')].filter(Boolean).join(' · ') || '—'}
                   </p>

@@ -27,6 +27,7 @@ import { Plus, Minus, Repeat, Clock, CalendarClock, AlertTriangle, Ban, Copy, Tr
 import { PageEyebrow } from '@/components/dashboard/page-eyebrow'
 import { NuevoAbonoForm } from '@/components/dashboard/nuevo-abono-form'
 import { ConfirmDialog } from '@/components/crm/confirm-dialog'
+import { clientFullName } from '@/lib/client-name'
 
 // Fila de abono con los joins de nombre (cliente / servicio / cancha) que arma la page server.
 export type AbonoRow = {
@@ -45,7 +46,8 @@ export type AbonoRow = {
   // Snapshot del nombre del servicio (migr. 065, D-09), lo escribe el trigger `abonos_service_snapshot_trg`.
   // Opcional porque no todo `select` lo trae; se lee SIEMPRE vía apptServiceName (snapshot → join).
   service_name?: string | null
-  clients: { name: string } | null
+  // last_name: apellido opcional (migr. 081); se muestra con clientFullName.
+  clients: { name: string; last_name?: string | null } | null
   services: { name: string } | null
   professionals: { name: string } | null
 }
@@ -377,7 +379,7 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 space-y-1">
-                        <p className="text-sm font-medium truncate">{a.clients?.name ?? 'Cliente'}</p>
+                        <p className="text-sm font-medium truncate">{clientFullName(a.clients) || 'Cliente'}</p>
                         <p className="text-xs text-muted-foreground truncate">{bookable}</p>
                         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Clock className="w-3 h-3 flex-shrink-0" />
@@ -502,12 +504,12 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
         const gateRechaza = a.status === 'active'
         const esArchivado = !isAbonoActivo(a, futureTurnoCounts) && !gateRechaza
         const close = () => setDetailAbono(null)
-        const title = `${a.clients?.name ?? 'Cliente'} · ${DAY_LABELS[a.day_of_week]} ${hhmm(a.start_time)}`
+        const title = `${clientFullName(a.clients) || 'Cliente'} · ${DAY_LABELS[a.day_of_week]} ${hhmm(a.start_time)}`
         const body = (
           <div className="space-y-4">
             {/* Serie */}
             <div className="space-y-1.5 rounded-lg border border-border bg-card p-3.5 text-sm">
-              <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Cliente</span><span className="font-medium">{a.clients?.name ?? '—'}</span></div>
+              <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">Cliente</span><span className="font-medium">{clientFullName(a.clients) || '—'}</span></div>
               <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">{term.service}</span><span className="font-medium">{bookable}</span></div>
               {a.professionals?.name && serviceName && (
                 <div className="flex gap-2"><span className="w-24 shrink-0 text-muted-foreground">{term.resource}</span><span className="font-medium">{a.professionals.name}</span></div>
@@ -657,7 +659,7 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
           <ConfirmDialog
             open
             onOpenChange={(o) => { if (!o) setCancelTarget(null) }}
-            title={`¿Dar de baja el turno fijo de ${t.clients?.name ?? 'este cliente'}?`}
+            title={`¿Dar de baja el turno fijo de ${clientFullName(t.clients) || 'este cliente'}?`}
             description={description}
             risk="alto"
             confirmLabel="Dar de baja"
@@ -681,7 +683,7 @@ export function AbonosClient({ business, abonos, turnoCounts, lastTurnoDates, fu
           <ConfirmDialog
             open
             onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}
-            title={`¿Eliminar el turno fijo de ${t.clients?.name ?? 'este cliente'}?`}
+            title={`¿Eliminar el turno fijo de ${clientFullName(t.clients) || 'este cliente'}?`}
             description={description}
             risk="alto"
             confirmLabel="Eliminar"
