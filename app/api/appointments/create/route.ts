@@ -4,6 +4,7 @@ import { getBusinessSecrets } from '@/lib/business-secrets'
 import { createCalendarEvent } from '@/lib/google-calendar'
 import { createAppointmentCore } from '@/lib/booking-core'
 import { sendManualBookingConfirmation, emailBrandInputs } from '@/lib/email'
+import { clientFullName, normalizeLastName } from '@/lib/client-name'
 
 // Alta MANUAL de turno desde el dashboard (autenticada). A diferencia del booking PÚBLICO
 // (app/api/booking/create — service role, tenant por slug), este endpoint corre con la SESIÓN
@@ -17,6 +18,8 @@ import { sendManualBookingConfirmation, emailBrandInputs } from '@/lib/email'
 // Lo que SÍ reusamos: createAppointmentCore (anti-tampering por business_id + re-check de solapamiento
 // con buffer + liberación de holds vencidos + insert + traducción 23505/23P01 → slot_taken). Cero
 // duplicación de esa cadena; el camino manual no abre un bypass del re-check de disponibilidad.
+// El alta rápida inline acepta un apellido opcional (clientLastName, quick 261124-nxz): va a
+// clients.last_name del cliente nuevo y el snapshot client_name sale con el nombre completo.
 export async function POST(request: Request) {
   // Cliente anon+RLS con las cookies de la sesión del dueño. NO admin: el aislamiento por tenant lo
   // garantiza RLS + el filtro por business_id resuelto por owner_id (defensa en profundidad).
@@ -58,6 +61,10 @@ export async function POST(request: Request) {
   const time = typeof body.time === 'string' ? body.time : ''
   const clientId = typeof body.clientId === 'string' && body.clientId.trim() ? body.clientId.trim() : null
   const clientName = typeof body.clientName === 'string' ? body.clientName.trim() : ''
+  // Apellido opcional del alta rápida inline (quick 261124-nxz): solo lo manda el modo «cliente
+  // nuevo». Con un cliente existente el form ya manda el nombre completo en clientName y este campo
+  // llega null.
+  const clientLastName = normalizeLastName(body.clientLastName)
   const clientPhone = typeof body.clientPhone === 'string' && body.clientPhone.trim() ? body.clientPhone.trim() : null
   const clientEmail = typeof body.clientEmail === 'string' && body.clientEmail.trim() ? body.clientEmail.trim() : null
   const notes = typeof body.notes === 'string' && body.notes.trim() ? body.notes.trim().slice(0, 1000) : null
@@ -68,12 +75,17 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: 'missing_fields' }, { status: 400 })
   }
 
+  // Nombre completo: el snapshot del turno, el evento del calendario del dueño y el mail llevan
+  // «Nombre Apellido», igual que el camino del cliente existente (que ya lo manda completo).
+  const fullName = clientFullName({ name: clientName, last_name: clientLastName })
+
   // ── Resolver/crear el cliente con dedupe (D-04) ────────────────────────────────────────────
   // Toda escritura/lectura de clients corre con `supabase` (anon+RLS), NUNCA admin. RLS + el filtro
   // por business_id garantizan que solo se toque el negocio del dueño.
   const resolvedClientId = await resolveClientId(supabase, business.id, {
     clientId,
     clientName,
+    clientLastName,
     clientPhone,
     clientEmail,
   })
@@ -88,7 +100,7 @@ export async function POST(request: Request) {
     date,
     time,
     clientId: resolvedClientId,
-    clientName,
+    clientName: fullName,
     clientPhone,
     clientEmail,
     notes,
@@ -112,9 +124,9 @@ export async function POST(request: Request) {
         const secrets = await getBusinessSecrets(business.id)
         if (!secrets.google_refresh_token) return
         const eventId = await createCalendarEvent(secrets.google_refresh_token, {
-          summary: `${serviceName || 'Turno'} · ${clientName}`,
+          summary: `${serviceName || 'Turno'} · ${fullName}`,
           description: [
-            `Cliente: ${clientName}`,
+            `Cliente: ${fullName}`,
             clientPhone ? `Tel: ${clientPhone}` : '',
             clientEmail ? `Email: ${clientEmail}` : '',
             notes ? `Notas: ${notes}` : '',
@@ -148,7 +160,7 @@ export async function POST(request: Request) {
         const secrets = await getBusinessSecrets(business.id)
         await sendManualBookingConfirmation({
           to: clientEmail,
-          clientName,
+          clientName: fullName,
           service: serviceName,
           date,
           time,
@@ -184,9 +196,15 @@ export async function POST(request: Request) {
 async function resolveClientId(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,
-  input: { clientId: string | null; clientName: string; clientPhone: string | null; clientEmail: string | null },
+  input: {
+    clientId: string | null
+    clientName: string
+    clientLastName: string | null
+    clientPhone: string | null
+    clientEmail: string | null
+  },
 ): Promise<string | null> {
-  const { clientId, clientName, clientPhone, clientEmail } = input
+  const { clientId, clientName, clientLastName, clientPhone, clientEmail } = input
 
   // (1) clientId explícito → re-validar por tenant antes de confiar en él (T-01-07).
   if (clientId) {
@@ -223,7 +241,7 @@ async function resolveClientId(
   // (3) Sin match → cliente nuevo (anon+RLS, NUNCA admin).
   const { data: created } = await supabase
     .from('clients')
-    .insert({ business_id: businessId, name: clientName, phone: clientPhone, email: clientEmail })
+    .insert({ business_id: businessId, name: clientName, last_name: clientLastName, phone: clientPhone, email: clientEmail })
     .select('id')
     .single()
   return created?.id || null

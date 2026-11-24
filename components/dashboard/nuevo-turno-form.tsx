@@ -33,7 +33,7 @@ import { cn } from '@/lib/utils'
 import { Calendar } from '@/components/ui/calendar'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { clientFullName } from '@/lib/client-name'
+import { clientFullName, normalizeLastName } from '@/lib/client-name'
 
 // ── Hook responsive mínimo (sin dependencias) ───────────────────────────────────────────────
 // Dialog y Drawer son portales con estado propio; renderizar uno u otro pide un breakpoint en JS,
@@ -73,7 +73,9 @@ function normEmail(e: string | null | undefined) {
   return e ? e.toLowerCase().trim() : ''
 }
 
-type SelectedClient = { id: string | null; name: string; phone: string | null; email: string | null }
+// last_name lo trae solo el cliente nuevo inline; para uno existente va null porque su name ya es el
+// completo (si no, el apellido saldría dos veces).
+type SelectedClient = { id: string | null; name: string; last_name: string | null; phone: string | null; email: string | null }
 
 interface Props {
   open: boolean
@@ -354,6 +356,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
   const [clientSearch, setClientSearch] = useState('')
   const [creatingClient, setCreatingClient] = useState(false)
   const [newClientName, setNewClientName] = useState('')
+  const [newClientLastName, setNewClientLastName] = useState('')
   const [newClientContact, setNewClientContact] = useState('')
 
   const searchListId = useId()
@@ -366,7 +369,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
   // El form está "sucio" si se tocó algún campo → habilita la confirmación de descarte del shell.
   const isDirty = !!(
     selectedClient || creatingClient || serviceId || date || time ||
-    notes.trim() || newClientName.trim() || newClientContact.trim()
+    notes.trim() || newClientName.trim() || newClientLastName.trim() || newClientContact.trim()
   )
   // El ref se actualiza en un effect (no en render): el shell lo lee en el handler de cierre, que
   // corre siempre después de los effects, así que refleja el último estado.
@@ -404,7 +407,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
 
   function pickClient(c: Client) {
     // name = nombre completo: viaja como clientName al snapshot appointments.client_name (D-07).
-    setSelectedClient({ id: c.id, name: clientFullName(c), phone: c.phone, email: c.email })
+    setSelectedClient({ id: c.id, name: clientFullName(c), last_name: null, phone: c.phone, email: c.email })
     setCreatingClient(false)
   }
 
@@ -424,6 +427,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
     setSelectedClient({
       id: null,
       name,
+      last_name: normalizeLastName(newClientLastName),
       phone: isEmail ? null : contact,
       email: isEmail ? contact : null,
     })
@@ -449,7 +453,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
       if (!name) { toast.error('Ingresá el nombre del cliente.'); return }
       if (!contact) { toast.error('Ingresá un teléfono o email del cliente.'); return }
       const isEmail = contact.includes('@')
-      client = { id: null, name, phone: isEmail ? null : contact, email: isEmail ? contact : null }
+      client = { id: null, name, last_name: normalizeLastName(newClientLastName), phone: isEmail ? null : contact, email: isEmail ? contact : null }
     }
     if (!client || !serviceId || !date || !time) {
       toast.error('Completá el cliente, el servicio y el horario.')
@@ -473,6 +477,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
         body: JSON.stringify({
           clientId: client.id,
           clientName: client.name,
+          clientLastName: client.last_name,
           clientPhone: client.phone,
           clientEmail: client.email,
           serviceId,
@@ -511,7 +516,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
     return (
       <div className="space-y-4">
         <div className="space-y-1.5 rounded-lg border border-border bg-card p-3.5 text-sm">
-          <div className="flex gap-2"><span className="w-20 shrink-0 text-muted-foreground">Cliente</span><span className="font-medium">{pendingClient.name}</span></div>
+          <div className="flex gap-2"><span className="w-20 shrink-0 text-muted-foreground">Cliente</span><span className="font-medium">{clientFullName(pendingClient)}</span></div>
           <div className="flex gap-2"><span className="w-20 shrink-0 text-muted-foreground">Servicio</span><span className="font-medium">{svc ? svc.name : '—'}</span></div>
           <div className="flex gap-2"><span className="w-20 shrink-0 text-muted-foreground">Cuándo</span><span className="font-medium capitalize">{format(parseISO(date), "EEE d 'de' MMM", { locale: es })} · {time}</span></div>
         </div>
@@ -546,7 +551,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
             <div className="flex items-center gap-2 min-w-0">
               <Check className="w-4 h-4 text-primary flex-shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{selectedClient.name}</p>
+                <p className="text-sm font-medium truncate">{clientFullName(selectedClient)}</p>
                 {selectedClient.phone && (
                   <p className="text-xs text-muted-foreground truncate">{selectedClient.phone}</p>
                 )}
@@ -564,6 +569,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
                 if (selectedClient.id === null) {
                   // Cliente nuevo (todavía no persistido) → EDITAR: volver al form con los datos, sin borrarlos.
                   setNewClientName(selectedClient.name)
+                  setNewClientLastName(selectedClient.last_name || '')
                   setNewClientContact(selectedClient.email || selectedClient.phone || '')
                   setSelectedClient(null)
                   setCreatingClient(true)
@@ -585,15 +591,27 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
             >
               <ChevronLeft className="w-3.5 h-3.5" /> Volver a buscar
             </button>
-            <div className="space-y-1.5">
-              <Label htmlFor={`${searchListId}-name`}>Nombre</Label>
-              <Input
-                id={`${searchListId}-name`}
-                value={newClientName}
-                onChange={(e) => setNewClientName(e.target.value)}
-                placeholder="Nombre y apellido"
-                autoComplete="off"
-              />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1 space-y-1.5">
+                <Label htmlFor={`${searchListId}-name`}>Nombre</Label>
+                <Input
+                  id={`${searchListId}-name`}
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  placeholder="Nombre"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="flex-1 space-y-1.5">
+                <Label htmlFor={`${searchListId}-last-name`}>Apellido (opcional)</Label>
+                <Input
+                  id={`${searchListId}-last-name`}
+                  value={newClientLastName}
+                  onChange={(e) => setNewClientLastName(e.target.value)}
+                  placeholder="Apellido"
+                  autoComplete="off"
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor={`${searchListId}-contact`}>Teléfono o email</Label>
@@ -608,7 +626,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
             {dedupeMatch ? (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Ya tenés un cliente con ese contacto: <span className="font-medium">{dedupeMatch.name}</span>. ¿Usar el existente?
+                  Ya tenés un cliente con ese contacto: <span className="font-medium">{clientFullName(dedupeMatch)}</span>. ¿Usar el existente?
                 </p>
                 <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={useExistingFromDedupe}>
                   Usar existente
@@ -642,6 +660,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
                     onClick={() => {
                       setCreatingClient(true)
                       setNewClientName(clientSearch.replace(/\d/g, '').trim())
+                      setNewClientLastName('')
                       setNewClientContact(/\d/.test(clientSearch) ? clientSearch.trim() : '')
                     }}
                   >
@@ -673,6 +692,7 @@ function TurnoFormBody({ onClose, dirtyRef, clients, services, professionals, lo
                       onClick={() => {
                         setCreatingClient(true)
                         setNewClientName('')
+                        setNewClientLastName('')
                         setNewClientContact('')
                       }}
                       className="w-full text-left px-3 py-2 text-xs font-medium text-primary hover:bg-secondary/60 transition-colors flex items-center gap-1.5"

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { hasSupabaseCreds } from './env'
 import { seedOneTenant, teardownOneTenant, type SeededTenant } from './helpers/booking-fixtures'
@@ -19,6 +19,42 @@ import { createAppointmentCore } from '@/lib/booking-core'
 // cliente con la misma normalización (teléfono = solo dígitos, email = lowercase), (2) llamar a
 // createAppointmentCore con requireDeposit:false. Es la lógica exacta del handler (resolveClientId →
 // core), por lo que valida el contrato sin un server vivo.
+//
+// Además de la réplica, los casos «alta rápida —» (quick 261124-nxz) invocan el POST REAL del handler
+// con la sesión del dueño: una réplica sigue verde aunque el handler se olvide del apellido, así que
+// el apellido opcional del alta inline se prueba contra el código que corre en producción.
+
+const h = vi.hoisted(() => ({
+  // Cliente que devuelve `@/lib/supabase/server`: el anon autenticado como el dueño del caso.
+  session: { current: null as SupabaseClient | null },
+}))
+
+// Mock PARCIAL de next/server: se conservan los exports reales y se reemplaza SOLO `after`, que
+// descarta la tarea. Google Calendar y el mail son best-effort y no se ejercitan acá; además, sin el
+// request scope de Next el `after` real no funciona cuando el handler se invoca directo desde Vitest.
+vi.mock('next/server', async importOriginal => {
+  const actual = await importOriginal<typeof import('next/server')>()
+  return { ...actual, after: () => {} }
+})
+
+// El handler pide la sesión del dueño; se le entrega el cliente anon autenticado del caso, así corre
+// con RLS como en producción (nunca service role).
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: async () => h.session.current,
+}))
+
+import { POST as createAppointmentPOST } from '@/app/api/appointments/create/route'
+
+async function postAppointment(body: Record<string, unknown>): Promise<{ status: number; json: Record<string, unknown> }> {
+  const res = await createAppointmentPOST(
+    new Request('http://localhost/api/appointments/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  )
+  return { status: res.status, json: (await res.json()) as Record<string, unknown> }
+}
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -345,5 +381,121 @@ describe.skipIf(!hasSupabaseCreds)('alta manual de turno (dedupe D-04 + confirme
       .eq('business_id', t.businessId)
       .eq('service_id', other.serviceId)
     expect((tampered ?? []).length).toBe(0)
+  })
+
+  // ── Alta rápida inline con apellido, vía el POST REAL (quick 261124-nxz) ──────────────────────
+  function baseBody() {
+    return {
+      serviceId: t.serviceId,
+      professionalId: t.professionalId,
+      locationId: t.locationId,
+      date: DATE,
+    }
+  }
+
+  it('alta rápida — cliente nuevo con apellido: clients.last_name y snapshot con el nombre completo', async () => {
+    h.session.current = ownerAnon
+    const { status, json } = await postAppointment({
+      ...baseBody(),
+      time: '10:00',
+      clientId: null,
+      clientName: 'Ana',
+      clientLastName: '  Pérez ',
+      clientPhone: '11 6000-0001',
+      clientEmail: null,
+    })
+    expect(status).toBe(200)
+    expect(json.ok).toBe(true)
+    const { data: appt } = await t.admin
+      .from('appointments')
+      .select('client_name, client_id')
+      .eq('id', json.appointmentId as string)
+      .single()
+    expect(appt?.client_name).toBe('Ana Pérez')
+    const { data: client } = await t.admin
+      .from('clients')
+      .select('name, last_name')
+      .eq('id', appt?.client_id as string)
+      .single()
+    expect(client?.name).toBe('Ana')
+    expect(client?.last_name).toBe('Pérez')
+  })
+
+  it('alta rápida — apellido de solo espacios → last_name null y snapshot solo con el nombre', async () => {
+    h.session.current = ownerAnon
+    const { status, json } = await postAppointment({
+      ...baseBody(),
+      time: '14:00',
+      clientId: null,
+      clientName: 'Ana',
+      clientLastName: '   ',
+      clientPhone: '11 6000-0002',
+      clientEmail: null,
+    })
+    expect(status).toBe(200)
+    expect(json.ok).toBe(true)
+    const { data: appt } = await t.admin
+      .from('appointments')
+      .select('client_name, client_id')
+      .eq('id', json.appointmentId as string)
+      .single()
+    expect(appt?.client_name).toBe('Ana')
+    const { data: client } = await t.admin
+      .from('clients')
+      .select('name, last_name')
+      .eq('id', appt?.client_id as string)
+      .single()
+    expect(client?.name).toBe('Ana')
+    expect(client?.last_name).toBeNull()
+  })
+
+  it('alta rápida — cliente existente sin apellido en el body: snapshot igual que antes, sin tocar el cliente', async () => {
+    h.session.current = ownerAnon
+    const { status, json } = await postAppointment({
+      ...baseBody(),
+      time: '10:00',
+      clientId: existingClientId,
+      clientName: 'Cliente Existente',
+      clientPhone: EXISTING_PHONE,
+      clientEmail: EXISTING_EMAIL,
+    })
+    expect(status).toBe(200)
+    expect(json.ok).toBe(true)
+    const { data: appt } = await t.admin
+      .from('appointments')
+      .select('client_name, client_id')
+      .eq('id', json.appointmentId as string)
+      .single()
+    expect(appt?.client_name).toBe('Cliente Existente')
+    expect(appt?.client_id).toBe(existingClientId)
+    const { data: clients } = await t.admin.from('clients').select('id, last_name').eq('business_id', t.businessId)
+    expect((clients ?? []).length).toBe(1)
+    expect(clients?.[0]?.last_name).toBeNull()
+  })
+
+  it('alta rápida — contacto repetido reusa el cliente sin pisarle nombre ni apellido; el snapshot es lo tipeado', async () => {
+    h.session.current = ownerAnon
+    const { status, json } = await postAppointment({
+      ...baseBody(),
+      time: '14:00',
+      clientId: null,
+      clientName: 'Otra',
+      clientLastName: 'Persona',
+      clientPhone: '1122334455',
+      clientEmail: null,
+    })
+    expect(status).toBe(200)
+    expect(json.ok).toBe(true)
+    const { data: appt } = await t.admin
+      .from('appointments')
+      .select('client_name, client_id')
+      .eq('id', json.appointmentId as string)
+      .single()
+    expect(appt?.client_id).toBe(existingClientId)
+    expect(appt?.client_name).toBe('Otra Persona')
+    const { data: clients } = await t.admin.from('clients').select('id, name, last_name').eq('business_id', t.businessId)
+    expect((clients ?? []).length).toBe(1)
+    expect(clients?.[0]?.name).toBe('Cliente Existente')
+    expect(clients?.[0]?.last_name).toBeNull()
   })
 })
