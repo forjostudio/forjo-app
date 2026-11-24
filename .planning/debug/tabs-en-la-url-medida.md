@@ -2495,3 +2495,42 @@ Logs: `C:/Users/franc/AppData/Local/Temp/claude/19a1c3eef8049c86/e3541fb4-9838-4
 `casos-antes.txt`).
 
 veredictos (o.1): R3-WR-01=reproduce · R2-IN-04=reproduce
+
+### (o.2) /clients con `fallback={null}`: medido en la app real (2026-11-24)
+
+Los recorridos `CL-ficha-movil` y `CL-ficha-escritorio` de `.planning/debug/probes/g04-scroll-y-recarga.mjs`, con sus
+esperados commiteados antes de la primera corrida (`260a3b9`, `test(quick-261124-q68)`). Corrida
+`node scripts/con-turno.mjs node .planning/debug/probes/g04-scroll-y-recarga.mjs CL-ficha-movil,CL-ficha-escritorio
+rojo-q68 hipotesis` (Chrome 157 headless, `next dev` propio en el 3031; esperó el turno detrás de una suite de Playwright
+de otro proyecto, sin tocarla). Huella de la página medida:
+
+`clients/page.tsx huella=6fc0d0dc947cc16e suspense: <Suspense fallback={null}>`
+
+| Recorrido | condición | documento (alto / vista) | scroll pedido → borde del primer nodo | lista (scrollHeight / clientHeight) | al abrir la ficha | escrituras de Next | `vacio_al_entrar` |
+|---|---|---|---|---|---|---|---|
+| `CL-ficha-movil` 390x844 | `inalcanzable` | 844 / 844 (no scrollea) | ninguno; borde en 131 | 374 / 374 | `scrollY` 0 → 0; la lista se oculta (la ficha la reemplaza: no comparable) | ninguna | `si` (322 ms) |
+| `CL-ficha-escritorio` 1280x800 | `inalcanzable` | 883 / 800 | pidió 123, el máximo es 83; borde en **0** | 467 / 467 | `scrollY` 83 → 83 (mín. 83); lista 0 → 0 | ninguna | `si` (325 ms) |
+
+**Motivo del veredicto (medido):** el handler de scroll de Next no mueve nada si el borde de arriba de la página está
+en la pantalla, y en `/clients` ese borde no puede salir de la pantalla:
+- en el celular el contenedor raíz de `ClientsClient` es `absolute inset-0`, fuera del flujo: el documento mide
+  exactamente el viewport (844 = 844) y no scrollea;
+- en escritorio el contenedor es `lg:h-screen`, así que el documento mide lo que hay arriba de la página más una pantalla
+  (883 = 83 + 800): el scroll máximo (83) es justo el desplazamiento del borde, que llega a 0 y nunca queda afuera.
+
+La condición del mecanismo G-04-6 no existe en esta pantalla, en ningún ancho: el «no saltó» de la tabla no es la
+prueba (con la condición ausente no podía saltar); la prueba es la geometría. La lista tiene una sola fila con los
+datos locales (no scrollea), pero eso no cambia el veredicto: el handler mira el nodo de la página, no la lista.
+
+**Pendiente para el dueño (no se tocó código ni comentario, regla del quick):** `vacio_al_entrar=si` en las dos
+corridas (322 y 325 ms con el contenedor de la página sin nada) **desmiente el comentario de `clients/page.tsx`**, que
+dice que el fallback «NUNCA se renderiza». Se dibuja en cada entrada blanda mientras llega el chunk. No hace daño hoy
+(la condición del salto es inalcanzable), pero el comentario es falso; corregirlo, o darle igual el nodo por
+consistencia con Finanzas/Negocio/Configuración, queda como decisión del dueño.
+
+**Lo que NO cierra:** el teléfono real, Safari de iOS (otra geometría posible del viewport con la barra de direcciones)
+y el build de producción.
+
+Log: `C:/Users/franc/AppData/Local/Temp/claude/19a1c3eef8049c86/e3541fb4-9838-45ba-8edf-fb689e438b9e/scratchpad/q68/cl-hipotesis.txt`.
+
+veredictos (o.2): CL-fallback=no-reproduce
