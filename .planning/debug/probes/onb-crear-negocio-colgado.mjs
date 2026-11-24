@@ -45,6 +45,19 @@
 // Las demas variantes siguen esperando `exito`. Cada corrida borra su usuario de prueba al final
 // (cascada a su negocio).
 //
+// ESPERADO 2.118 (quick 261124-p44, escrito ANTES de correr). Con @supabase/supabase-js 2.118.0 (auth-js
+// sin el mutex de navigator.locks, PR #2392; @supabase/ssr 0.10.3 no pasa `lock`, asi que el navegador cae
+// en el camino por defecto sin lock — GoTrueClient.js:154 `this.lock = null`, :32):
+//   mail, password, oauth-ish, refresh-ok  `exito`, con `lock:sb-…` held en 0 muestras.
+//   refresh-colgado  `error-y-reintento-ok` (la red de 20 s de lib/con-limite.ts sigue soltando el boton)
+//                    y `veredicto getUser = colgado-detras-del-refresh`: el mutex ya no esta, pero el refresh
+//                    sigue siendo single-flight (`refreshingDeferred`, GoTrueClient.js:4194) y el fetch de
+//                    auth (`_request` de lib/fetch.js, `_refreshAccessToken` GoTrueClient.js:4018) sigue sin
+//                    timeout ni AbortSignal, asi que un POST /auth/v1/token que no vuelve sigue reteniendo a
+//                    getUser (0 GET /auth/v1/user entre el click y la liberacion del refresh).
+//   QUE NO MIDE: la clase de cuelgue que el bump SI arregla (navigator.locks trabado en WebKit/iOS, #936, y la
+//   carrera visibilitychange/tick) no se reproduce en Chrome headless; eso se confirma solo en prod.
+//
 // EL ESPERADO esta escrito ANTES de la primera corrida (ver ESPERADO y el archivo de debug): en local,
 // sin lock retenido por otra pestaña, el alta NO se cuelga: /auth/v1/user 200 → POST /rest/v1/businesses
 // 201 → toast de exito → /onboarding/integraciones (o /dashboard si integraciones redirige).
@@ -484,15 +497,22 @@ async function main() {
     const destinoOk = (ruta) => ruta === '/onboarding/integraciones' || ruta === '/dashboard'
     const negociosEnBase = () => Number(sql(`select count(*) from public.businesses b join auth.users u on u.id = b.owner_id where u.email = '${EMAIL}'`))
 
+    // (quick 261124-p44) Fin de la ventana del `veredicto getUser`: la liberacion del refresh retenido, o
+    // el final de la observacion si nunca hubo aviso.
+    let finVentanaGetUser = null
+    let ventanaHastaLiberar = false
     if (variante === 'refresh-colgado') {
       const aviso = await observar(OBSERVAR_MS, (e) => e.boton === 'Reintentar')
       if (!aviso) {
+        finVentanaGetUser = Date.now()
         resultado = vioGuardando ? 'colgado' : 'click-no-llego'
       } else {
         const tAviso = seg(aviso.t)
         console.log(`${ts()} AVISO a +${tAviso}s del click · alertas=${JSON.stringify(aviso.alertas)} · POST businesses hasta aca=${postsNegocio.filter((t) => t >= marcaClick).length}`)
         // Liberar cada request retenido y apagar la intercepcion (un request ya cancelado tira: se tolera).
         const marcaLiberar = Date.now()
+        finVentanaGetUser = marcaLiberar
+        ventanaHastaLiberar = true
         const postsAntesDeLiberar = postsNegocio.filter((t) => t >= marcaClick && t < marcaLiberar).length
         // En tandas: lo retenido primero es el preflight OPTIONS, y al liberarlo el POST del refresh entra
         // pausado a su vez. Se libera hasta que pase 1 s sin requests nuevos y recien ahi se apaga Fetch.
@@ -552,6 +572,17 @@ async function main() {
     }
     console.log(`el boton paso por «Guardando…»: ${vioGuardando ? 'si' : 'no'}`)
     console.log(`toasts vistos: ${JSON.stringify(toastsVistos)}`)
+    // (quick 261124-p44) Instrumento aditivo: no cambia `resultado`. `locks` puede venir como string de error.
+    const conLockSb = muestras.filter((m) => m.locks && typeof m.locks === 'object' && (m.locks.held ?? []).some((n) => n.startsWith('lock:sb-'))).length
+    const locksConError = muestras.filter((m) => typeof m.locks === 'string').length
+    console.log(`muestras con lock:sb-… held: ${conLockSb}/${muestras.length}${locksConError ? ` (${locksConError} con error de navigator.locks)` : ''}`)
+    if (variante === 'refresh-colgado') {
+      const fin = finVentanaGetUser ?? Date.now()
+      const getsUser = [...reqs.values()].filter((r) => r.metodo === 'GET' && /\/auth\/v1\/user/.test(r.url) && r.t >= marcaClick).sort((a, b) => a.t - b.t)
+      const enVentana = getsUser.filter((r) => r.t < fin).length
+      const primero = getsUser[0] ? `+${((getsUser[0].t - marcaClick) / 1000).toFixed(1)}s del click` : '(ninguno)'
+      console.log(`veredicto getUser: ${enVentana} GET /auth/v1/user entre el click y ${ventanaHastaLiberar ? `la liberacion del refresh (+${((fin - marcaClick) / 1000).toFixed(1)}s)` : 'el final de la observacion (no hubo aviso)'} → ${enVentana === 0 ? 'colgado-detras-del-refresh' : 'no-espero-al-refresh'} · primer GET /auth/v1/user: ${primero}`)
+    }
 
     console.log('')
     console.log('── red desde el click ──')
