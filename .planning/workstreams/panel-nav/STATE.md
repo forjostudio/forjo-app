@@ -86,6 +86,7 @@ current_phase_name: Los tabs profundos sobre la política ya fijada
 | 261124-ine | Export/import de clientes y finanzas pasa de CSV a Excel (.xlsx) con formato | 2026-11-24 | 7629e72 | [261124-ine-export-import-de-clientes-y-finanzas-pas](./quick/261124-ine-export-import-de-clientes-y-finanzas-pas/) |
 | 261124-lfd | Apellido opcional del cliente (solo panel, migr. 081) + columna Origen del Excel que no confunda (Needs Review) | 2026-11-24 | 3a80447 | [261124-lfd-apellido-opcional-del-cliente-solo-panel](./quick/261124-lfd-apellido-opcional-del-cliente-solo-panel/) |
 | 261124-nxz | Apellido opcional en el alta rapida de cliente (turno, abono, venta) (Verified) | 2026-11-24 | 536bb3c | [261124-nxz-apellido-opcional-en-el-alta-rapida-de-c](./quick/261124-nxz-apellido-opcional-en-el-alta-rapida-de-c/) |
+| 261124-q68 | Pendientes de v0.31: R3-WR-01 (applyPanelView con chequeo de llegada) y R2-IN-04 (fila de Clientes con la URL de ahora) reprodujeron y quedaron arreglados; Finanzas a 390 px con flex-wrap; /clients fallback no reprodujo (page.tsx intacto); verificacion human_needed: sonda completa y G1-* pendientes por base local vacia; sin pushear | 2026-11-24 | 63c1207 | [261124-q68-pendientes-v0-31-r3-wr-01-r2-in-04-fallb](./quick/261124-q68-pendientes-v0-31-r3-wr-01-r2-in-04-fallb/) |
 | fast | Clientes del alta rapida (turno, abono, venta) con origin manual | 2026-11-24 | 95c5c98 | — |
 
 ## Decisions
