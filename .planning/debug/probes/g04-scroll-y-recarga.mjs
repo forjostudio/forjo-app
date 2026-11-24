@@ -1742,6 +1742,7 @@ function dFinanzasAncho() {
               // primero con al menos un turno, y si tampoco, sólo el actual. Lo que se midió queda DECLARADO en el detalle.
               let m = null
               for (const minimo of [10, 1]) {
+                console.log(`      [D-finanzas-ancho] ancho ${a.nombre}: buscando un mes con >= ${minimo} turnos`)
                 try {
                   m = { ...(await irAlMesConTurnos(cdp, { minimo, vacios: [] })), minimo }
                   break
@@ -1749,6 +1750,13 @@ function dFinanzasAncho() {
                   if (!(e instanceof Error) || !e.message.includes('ningun mes')) throw e
                   await navegar(cdp, ORIGEN + '/finances')
                   await esperarTabQuieto(cdp, 'Turnos', { condicion: COND_FINANZAS })
+                  // Tras la recarga, el boton «Mes anterior» tiene que estar ENGANCHADO por React antes del primer
+                  // toque: si no, el click se pierde y `irAlMesConTurnos` lo lee como «el mes no cambio» (corrida
+                  // verde-q68, dos veces seguidas).
+                  const enganchado = `(() => { const t = [...document.querySelectorAll('button[aria-label="Mes anterior"]')].find((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 }); return Boolean(t && Object.keys(t).some((k) => k.startsWith('__reactProps'))) })()`
+                  const topeEnganche = Date.now() + 30_000
+                  while (Date.now() < topeEnganche && !(await evaluar(cdp, enganchado).catch(() => false))) await dormir(200)
+                  await conteosQuietos(cdp)
                 }
               }
               if (m === null) { meses.push({ mes: '(ningun mes con turnos en 12)', sin_segundo: true }); break }
