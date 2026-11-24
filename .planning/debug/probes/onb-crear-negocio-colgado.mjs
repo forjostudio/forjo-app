@@ -58,6 +58,16 @@
 //   QUE NO MIDE: la clase de cuelgue que el bump SI arregla (navigator.locks trabado en WebKit/iOS, #936, y la
 //   carrera visibilitychange/tick) no se reproduce en Chrome headless; eso se confirma solo en prod.
 //
+// RESULTADOS 2.118 (2026-11-24, supabase-js 2.118.0, commit db5dbb9): 5/5 COINCIDE.
+//   mail            exito · salio del wizard a +5.4 s · lock:sb-… 0/9 muestras · 1 POST businesses · negocio si
+//   password        exito · +3.2 s · lock:sb-… 0/5 · 1 POST businesses · negocio si
+//   oauth-ish       exito · +3.9 s · lock:sb-… 0/8 · 1 POST businesses · negocio si (1er intento cayo por la
+//                   sonda antes del click: popup del Select abierto, «slug disponible» nunca aparecio; relanzado)
+//   refresh-ok      exito · +3.4 s · lock:sb-… 0/7 · POST /auth/v1/token 200 → GET /auth/v1/user 200 · negocio si
+//   refresh-colgado error-y-reintento-ok · aviso a +20.7 s · «Atrás» bloqueado 41/41 · 0 POST antes de liberar ·
+//                   lock:sb-… 0/44 · veredicto getUser = colgado-detras-del-refresh (0 GET /auth/v1/user antes de
+//                   liberar; el primero a +21.1 s, igual que en 2.106.2) · reintento → integraciones, 1 negocio.
+//
 // EL ESPERADO esta escrito ANTES de la primera corrida (ver ESPERADO y el archivo de debug): en local,
 // sin lock retenido por otra pestaña, el alta NO se cuelga: /auth/v1/user 200 → POST /rest/v1/businesses
 // 201 → toast de exito → /onboarding/integraciones (o /dashboard si integraciones redirige).
