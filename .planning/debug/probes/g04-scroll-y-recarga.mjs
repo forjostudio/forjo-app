@@ -74,6 +74,17 @@
 // misma vuelta con el tab respondiendo. Un `NO-COINCIDE` en modo `hipotesis` es un VEREDICTO (el caso no reproduce,
 // con su motivo: no cruzo, no volvio de la cache o volvio y el tab respondio), no un error del instrumento.
 //
+// MODO /clients (quick 261124-q68): los recorridos `CL-ficha-movil` y `CL-ficha-escritorio` miden si `/clients`
+// tiene el mecanismo de G-04-6 (el `fallback={null}` de su `<Suspense>`): entrada BLANDA a `/clients` en un documento
+// nuevo (el chunk de `ClientsClient` sin cargar), la CONDICION armada por la sonda (el borde de arriba del primer nodo
+// de la pagina fuera de la pantalla, si el documento scrollea; la lista a la mitad de su scroll propio) y un click REAL
+// en una fila. Miden si al abrir la ficha la pagina salto (`scrollY` o el `scrollTop` de la lista, este solo si la lista
+// se ve antes y despues) y si alguna escritura de scroll nombra el handler de Next. `condicion` dice si se pudo armar:
+// `inalcanzable` (el documento no scrollea) NO es un «no salto», es que la condicion no existio. `vacio_al_entrar` es
+// informativo (dice si la pagina hizo commit vacia al entrar, lo que desmiente el comentario de `clients/page.tsx`).
+// Sin escribir en la base. La sonda imprime ademas la linea del Suspense de `clients/page.tsx` con su huella.
+// No cierra: el telefono real, Safari de iOS, y el build de produccion.
+//
 // QUE NO CIERRA: Chrome de Android y Safari de iOS (esto es Chrome de escritorio headless con emulacion
 // movil), y el build de PRODUCCION (las variables publicas se incrustan en el build y el Supabase local
 // vive solo en el entorno de desarrollo: un build de produccion moveria dos variables a la vez).
@@ -1346,6 +1357,10 @@ RECORRIDOS.push(
   g1Recorrido({ id: 'G1-ventas-escritorio', entrada: 'sidebar', primero: 'Ventas', segundo: 'Egresos', titulo: 'obs-G1 escritorio 1280x800: Inicio -> sidebar Finanzas -> retroceder al mes con turnos (>= 10, 0 ventas, 0 egresos) -> Ventas (desde Turnos) -> Egresos' }),
 )
 RECORRIDOS.push(k1BfcacheCruce())
+RECORRIDOS.push(
+  clFichaRecorrido({ id: 'CL-ficha-movil', pantalla: 'movil', titulo: '/clients movil 390x844: Inicio -> barra Clientes (BLANDA, documento nuevo) -> el borde de arriba fuera (si el documento scrollea) y la lista a la mitad -> tocar una fila' }),
+  clFichaRecorrido({ id: 'CL-ficha-escritorio', pantalla: 'escritorio', titulo: '/clients escritorio 1280x800: Inicio -> sidebar Clientes (BLANDA, documento nuevo) -> el borde de arriba fuera (si el documento scrollea) y la lista a la mitad -> tocar una fila' }),
+)
 
 // ── R2-WR-01, caso 1 (quick 261118-kat): la guarda de consumo en vuelo y la vuelta desde la bfcache ──────────────
 // Ver la cabecera (MODO R2-WR-01). El recorrido arma a mano lo que WR-04 midio que la recarga no arma en Chrome 157:
@@ -1484,6 +1499,162 @@ function k1BfcacheCruce() {
   }
 }
 
+// ── /clients con la lista scrolleada (quick 261124-q68) ───────────────────────────────────────────
+// Ver la cabecera (MODO /clients). El mecanismo de G-04-6: con `fallback={null}` en el `<Suspense>` de la pagina, una
+// entrada BLANDA con el chunk de `ClientsClient` todavia sin cargar deja el handler de scroll de Next sin un nodo del
+// DOM para consumir el scroll de la navegacion; queda pendiente, y la primera actualizacion siguiente del arbol (abrir
+// una ficha: el `?c=` es navegacion real) lo ejecuta y lleva la pagina arriba. Pero el handler NO mueve nada si el
+// borde de arriba de la pagina ya esta en la pantalla: por eso el recorrido arma primero esa CONDICION y dice si pudo.
+
+/** El contenedor con scroll propio de la lista (`listRef`): el `overflow-y-auto` que tiene las filas. */
+const EXPR_LISTA_CL = `[...document.querySelectorAll('div.overflow-y-auto')].find((d) => d.querySelector('button.border-l-2'))`
+
+/** La geometria del documento, del primer nodo de la pagina y de la lista, AHORA. */
+const EXPR_GEOMETRIA_CL = `(() => {
+  const html = document.documentElement; const p = ${EXPR_PRIMERA}; const l = ${EXPR_LISTA_CL}
+  const bl = l ? l.getBoundingClientRect() : null
+  return {
+    y: Math.round(scrollY), alto_doc: html.scrollHeight, alto_vista: html.clientHeight, inner: innerHeight,
+    primera_top: p ? Math.round(p.getBoundingClientRect().top) : null,
+    primera: p ? p.tagName.toLowerCase() + '.' + String(p.className).split(' ').slice(0, 4).join('.') : '(ninguna)',
+    lista: l ? { scrollTop: Math.round(l.scrollTop), scrollHeight: l.scrollHeight, clientHeight: l.clientHeight, visible: bl.width > 0 && bl.height > 0 } : null,
+    filas: l ? l.querySelectorAll('button.border-l-2').length : 0,
+    ruta: location.pathname + location.search,
+    marca: globalThis.__sondaScroll ? globalThis.__sondaScroll.length : -1,
+  }
+})()`
+
+/** Espera la lista con filas y la geometria QUIETA (4 lecturas iguales, 1,2 s). */
+async function listaQuieta(cdp, tope = 120_000) {
+  const fin = Date.now() + tope
+  let previo = null
+  let iguales = 0
+  let ultimo = null
+  while (Date.now() < fin) {
+    ultimo = await evaluar(cdp, EXPR_GEOMETRIA_CL).catch(() => null)
+    const v = ultimo && ultimo.filas > 0 ? JSON.stringify({ ...ultimo, marca: 0 }) : null
+    if (v !== null && v === previo) iguales++
+    else iguales = 0
+    previo = v
+    if (iguales >= 3) return ultimo
+    await dormir(300)
+  }
+  throw new Error(`la lista de /clients no quedo quieta con filas en ${tope} ms (ultimo: ${JSON.stringify(ultimo)})`)
+}
+
+function clFichaRecorrido({ id, titulo, pantalla }) {
+  return {
+    id,
+    titulo,
+    async correr(cdp) {
+      const medir = async () => {
+        await entrarDirecto(cdp)
+        await evaluar(cdp, OBSERVAR_CONTENEDOR)
+        const marcaEntrada = await marcaDelScroll(cdp)
+        if (pantalla === 'escritorio') await tocarEnlaceDentro(cdp, 'nav[aria-label="Navegación"]', '/clients')
+        else await tocarEnLaBarra(cdp, '/clients')
+        const alEntrar = await listaQuieta(cdp)
+        const entrada = resumenContenedor(await leerContenedor(cdp))
+        const escriturasEntrada = await escriturasDesde(cdp, marcaEntrada)
+        // La CONDICION, como la sonda (`__sondaPropio`): (a) el documento, con el borde de arriba del primer nodo de la
+        // pagina 40 px fuera de la pantalla (`posicionar(..., 'borde')`); (b) la lista, a la mitad de su scroll.
+        const armado = await evaluar(cdp, `(() => {
+          const html = document.documentElement; const p = ${EXPR_PRIMERA}; const l = ${EXPR_LISTA_CL}
+          const docScrollea = html.scrollHeight > html.clientHeight
+          const listaScrollea = Boolean(l && l.scrollHeight > l.clientHeight)
+          let pedido = null
+          globalThis.__sondaPropio = true
+          if (docScrollea && p) { const pAbs = p.getBoundingClientRect().top + scrollY; const max = html.scrollHeight - innerHeight; pedido = Math.max(0, Math.min(max, Math.round(pAbs + 40))); window.scrollTo(0, pedido) }
+          if (listaScrollea) l.scrollTop = Math.round((l.scrollHeight - l.clientHeight) / 2)
+          globalThis.__sondaPropio = false
+          return { docScrollea, listaScrollea, pedido }
+        })()`)
+        const antes = await listaQuieta(cdp, 20_000)
+        const condicion = armado.docScrollea && antes.primera_top !== null && antes.primera_top < -1 ? 'alcanzada' : 'inalcanzable'
+        // La fila: una que no este abierta, con su centro adentro de la lista y de la pantalla, afirmado con
+        // `elementFromPoint` (la letra pegajosa puede tapar una), enganchada por React, en el viewport VISUAL.
+        const buscarFila = `(() => {
+          const l = ${EXPR_LISTA_CL}; if (!l) return null
+          const bl = l.getBoundingClientRect()
+          for (const f of l.querySelectorAll('button.border-l-2')) {
+            if (f.className.includes('border-l-primary')) continue
+            const b = f.getBoundingClientRect(); const cx = b.x + b.width / 2, cy = b.y + b.height / 2
+            if (b.height <= 0 || cy < Math.max(0, bl.top) + 4 || cy > Math.min(innerHeight, bl.bottom) - 4) continue
+            const el = document.elementFromPoint(cx, cy); if (!el || !f.contains(el)) continue
+            const vv = globalThis.visualViewport; const e = vv ? vv.scale : 1
+            const nombre = (f.querySelector('p.font-medium') || f).textContent.replace(/\\s+/g, ' ').trim()
+            return { x: vv ? (cx - vv.offsetLeft) * e : cx, y: vv ? (cy - vv.offsetTop) * e : cy, nombre, enganchada: Object.keys(f).some((k) => k.startsWith('__reactProps')) }
+          }
+          return null
+        })()`
+        let fila = null
+        const topeFila = Date.now() + 15_000
+        while (Date.now() < topeFila) {
+          fila = await evaluar(cdp, buscarFila).catch(() => null)
+          if (fila && fila.enganchada) break
+          await dormir(200)
+        }
+        if (!fila || !fila.enganchada) throw new Error(`P-1: no hay una fila visible, enganchada y sin abrir en /clients (${JSON.stringify(fila)})`)
+        const abierta = `(() => {
+          if (!/[?&]c=/.test(location.search)) return false
+          const l = ${EXPR_LISTA_CL}
+          return [...document.querySelectorAll('h1, h2, h3, p, span')].some((x) => { if (l && l.contains(x)) return false; const b = x.getBoundingClientRect(); return b.width > 0 && b.height > 0 && x.textContent.replace(/\\s+/g, ' ').trim() === ${JSON.stringify(fila.nombre)} })
+        })()`
+        const t0 = Date.now()
+        await clickEnPunto(cdp, fila)
+        const muestras = []
+        let llego = false
+        while (Date.now() - t0 < 15_000) {
+          muestras.push(await evaluar(cdp, 'Math.round(scrollY)').catch(() => null))
+          llego = await evaluar(cdp, abierta).catch(() => false)
+          if (llego) break
+          await dormir(50)
+        }
+        const ms = Date.now() - t0
+        if (!llego) throw new Error(`P-1: el toque en la fila «${fila.nombre}» no abrio la ficha en 15 s (quedo en ${await ubicacion(cdp).catch(() => '?')})`)
+        for (let i = 0; i < 15; i++) { await dormir(100); muestras.push(await evaluar(cdp, 'Math.round(scrollY)').catch(() => null)) }
+        const despues = await evaluar(cdp, EXPR_GEOMETRIA_CL)
+        const escrituras = await escriturasDesde(cdp, antes.marca)
+        const ys = muestras.filter((x) => typeof x === 'number')
+        const minimo = Math.min(antes.y, ...ys, despues.y)
+        // La lista sólo se compara si se ve antes Y despues: en el celular la ficha REEMPLAZA a la lista (`hidden`), y
+        // un elemento oculto lee `scrollTop` 0 sin que nadie lo haya movido (un salto falso).
+        const listaComparable = Boolean(antes.lista && despues.lista && antes.lista.visible && despues.lista.visible)
+        const saltoDoc = antes.y - minimo > 1
+        const saltoLista = listaComparable && Math.abs(despues.lista.scrollTop - antes.lista.scrollTop) > 1
+        const deNext = escrituras.some((e) => e.pila.includes('handlePotentialScroll'))
+        return { alEntrar, entrada, escriturasEntrada, armado, antes, condicion, fila, ms, despues, escrituras, minimo, listaComparable, saltoDoc, saltoLista, deNext }
+      }
+      let r
+      if (pantalla === 'escritorio') {
+        await escritorio(cdp)
+        try { r = await medir() } finally { await celular(cdp) }
+      } else {
+        await celular(cdp)
+        r = await medir()
+      }
+      return {
+        detalle: (p) => {
+          console.log(`${p}entrada blanda: contenedor vacio=${r.entrada.vacio_durante_la_entrada} tramos_ms=${JSON.stringify(r.entrada.tramos_vacios_ms)}`)
+          for (const l of r.entrada.lineas) console.log(`${p}   ${l}`)
+          for (const e of r.escriturasEntrada) console.log(`${p}   ESCRITURA en la entrada t=${e.t} ${e.que} en=${e.en} y=${e.y} ruta=${e.ruta} pila: ${e.pila}`)
+          console.log(`${p}al entrar: ${JSON.stringify(r.alEntrar)}`)
+          console.log(`${p}condicion=${r.condicion} · documento scrollea=${r.armado.docScrollea} (alto_doc=${r.alEntrar.alto_doc} alto_vista=${r.alEntrar.alto_vista} inner=${r.alEntrar.inner}) · scroll pedido=${r.armado.pedido} · lista scrollea=${r.armado.listaScrollea}`)
+          console.log(`${p}antes del toque: y=${r.antes.y} primera_top=${r.antes.primera_top} primera=${r.antes.primera} lista=${JSON.stringify(r.antes.lista)} filas=${r.antes.filas} ruta=${r.antes.ruta}`)
+          console.log(`${p}toque en la fila «${r.fila.nombre}» -> ficha abierta en ${r.ms} ms`)
+          console.log(`${p}despues: y=${r.despues.y} min_durante=${r.minimo} primera_top=${r.despues.primera_top} lista=${JSON.stringify(r.despues.lista)} ruta=${r.despues.ruta}`)
+          console.log(`${p}salto del documento=${r.saltoDoc ? 'si' : 'no'} · salto de la lista=${r.listaComparable ? (r.saltoLista ? 'si' : 'no') : 'no comparable (la lista no se ve antes y despues)'}`)
+          if (r.escrituras.length === 0) console.log(`${p}escrituras de scroll de la pagina al abrir: ninguna`)
+          for (const e of r.escrituras) console.log(`${p}ESCRITURA t=${e.t} ${e.que} en=${e.en} y_en_ese_momento=${e.y} ruta=${e.ruta} pila: ${e.pila}`)
+        },
+        medido: { condicion: r.condicion, salto_al_abrir: r.saltoDoc || r.saltoLista ? 'si' : 'no', next_al_abrir: r.deNext ? 'si' : 'no', vacio_al_entrar: r.entrada.vacio_durante_la_entrada },
+        esperado_si_HA: { condicion: 'alcanzada', salto_al_abrir: 'si', next_al_abrir: 'si' },
+        esperado_tras_el_fix: { condicion: 'alcanzada', salto_al_abrir: 'no', next_al_abrir: 'no' },
+      }
+    },
+  }
+}
+
 function iguales(a, b) { return JSON.stringify(a) === JSON.stringify(b) }
 
 async function correrYReportar(cdp, rec, modo) {
@@ -1538,7 +1709,7 @@ async function main() {
     console.log(`etiqueta=${etiqueta}`)
     console.log(`modo=${modo}`)
     console.log(`next.config.ts huella=${createHash('sha256').update(cfg).digest('hex').slice(0, 16)} reactStrictMode=${/reactStrictMode/.test(cfg) ? 'declarado' : 'ausente (default true)'}`)
-    for (const ruta of ['finances', 'negocio', 'settings']) {
+    for (const ruta of ['finances', 'negocio', 'settings', 'clients']) {
       const pagina = readFileSync(join(REPO, `app/(dashboard)/${ruta}/page.tsx`), 'utf8')
       // la primera linea que ABRE el boundary y no es un comentario (el comentario puede nombrar el boundary)
       const lineaSuspense = pagina.split(/\r?\n/).find((l) => l.includes('<Suspense') && !l.trim().startsWith('//')) ?? '(sin Suspense)'
