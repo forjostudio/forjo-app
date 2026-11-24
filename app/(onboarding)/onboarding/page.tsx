@@ -36,6 +36,7 @@ import { isValidBlockTime } from '@/lib/agenda-hours-payload'
 import { wizardSteps, stepperSteps } from '@/lib/onboarding-steps'
 import { OnboardingStepper } from '@/components/onboarding/onboarding-stepper'
 import { altaDelNegocio, esAltaSinConfirmar, pasosDeConfiguracion, type ConfiguracionExistente } from '@/lib/onboarding-alta'
+import { crearPlazo, aRespuestaFallida } from '@/lib/con-limite'
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
@@ -49,6 +50,13 @@ const LIMITE_ALTA_MS = 20_000
 // sabemos si el negocio se creó, así que no se puede decir "falló". «Reintentar» lo resuelve: si llegó a
 // la base, el próximo intento lo encuentra (`retomado`) en vez de crear otro.
 const MENSAJE_ALTA_SIN_CONFIRMAR = 'No pudimos confirmar que se creó tu negocio por un problema de conexión. Revisá tu conexión y tocá Reintentar.'
+// Tope de la CONFIGURACIÓN que sigue al alta (logo, servicios, profesionales, horarios, lead), DC-2 del
+// mismo quick: esos awaits pasan por el mismo lock de auth y sus fetch no tienen timeout, así que sin
+// esto el «Guardando...» eterno seguía alcanzable después del insert. Plazo COMPARTIDO de 20 s con tope
+// de 10 s por paso: un paso trabado no le come el tiempo a los demás, y si el lock entero está trabado el
+// total igual no pasa de 20 s. Un paso vencido cae en su rama de error de siempre (el toast honesto).
+const LIMITE_CONFIG_MS = 20_000
+const LIMITE_PASO_MS = 10_000
 
 // La clave local de cada servicio del paso 2 (D-08/D-09), y a la vez el `services.id` final, vive en
 // `lib/onboarding-agenda.ts`. Se mudó al módulo puro por WR-02: llamaba a `globalThis.crypto
@@ -527,6 +535,9 @@ export default function OnboardingPage() {
         return
       }
       const business = alta.negocio
+      // Desde acá el negocio existe: cada paso de la configuración corre con tope (DC-2) y, si vence, cae
+      // en su rama de error de siempre; no hay «Reintentar» del alta.
+      const enPlazo = crearPlazo(LIMITE_CONFIG_MS, LIMITE_PASO_MS)
 
       // Upload del logo al bucket `logos` (ONB-03, D-05). Timing: DESPUÉS de crear el negocio porque
       // la RLS del bucket exige que el negocio exista (path keyeado por business.id). El path lo arma
@@ -538,10 +549,12 @@ export default function OnboardingPage() {
           const ext = logoFile.name.split('.').pop()?.toLowerCase() || 'jpg'
           const path = `${business.id}/logo.${ext}`
           const bucket = supabase.storage.from('logos')
-          const { error: uploadErr } = await bucket.upload(path, logoFile, { upsert: true })
+          // `upload` de storage-js no acepta signal: queda con tope pero sin cancelación (es un upsert al
+          // mismo path, así que si termina tarde no duplica nada).
+          const { error: uploadErr } = await enPlazo(() => bucket.upload(path, logoFile, { upsert: true }))
           if (!uploadErr) {
             const { data: { publicUrl } } = bucket.getPublicUrl(path)
-            await supabase.from('businesses').update({ logo_url: `${publicUrl}?t=${Date.now()}` }).eq('id', business.id)
+            await enPlazo((signal) => supabase.from('businesses').update({ logo_url: `${publicUrl}?t=${Date.now()}` }).eq('id', business.id).abortSignal(signal))
           } else {
             console.error('[onboarding/logo]', uploadErr.message)
           }
@@ -573,7 +586,7 @@ export default function OnboardingPage() {
       // arrastrar al fondo a toda la configuración.
       let falloServicios = false
       if (pasos.servicios && filasDeServicios.length > 0) {
-        const { error: svcErr } = await supabase.from('services').insert(filasDeServicios)
+        const { error: svcErr } = await enPlazo((signal) => supabase.from('services').insert(filasDeServicios).abortSignal(signal)).catch(aRespuestaFallida)
         if (svcErr) {
           falloServicios = true
           console.error('[onboarding/services]', svcErr.code)
@@ -603,7 +616,7 @@ export default function OnboardingPage() {
         .filter(p => p.name.trim())
         .map(p => ({ name: p.name, business_id: business.id }))
       if (pasos.profesionales && filasDeProfesionales.length > 0) {
-        const { error: proErr } = await supabase.from('professionals').insert(filasDeProfesionales)
+        const { error: proErr } = await enPlazo((signal) => supabase.from('professionals').insert(filasDeProfesionales).abortSignal(signal)).catch(aRespuestaFallida)
         if (proErr) {
           console.error('[onboarding/professionals]', proErr.code)
           toast.error('Creamos tu negocio, pero no pudimos guardar tus profesionales. Entrá a Profesionales y cargalos.')
@@ -627,10 +640,10 @@ export default function OnboardingPage() {
         mapServices: shouldMapServices({ vertical, perFranja, servicesFailed: falloServicios }),
         liveServiceIds: pasos.idsVigentes,
       })
-      const { error: agendaErr } = pasos.horarios ? await supabase.rpc('save_agenda_blocks', {
+      const { error: agendaErr } = pasos.horarios ? await enPlazo((signal) => supabase.rpc('save_agenda_blocks', {
         p_business_id: business.id,
         p_blocks,
-      }) : { error: null }
+      }).abortSignal(signal)).catch(aRespuestaFallida) : { error: null }
       if (agendaErr) {
         // Se registra el CÓDIGO, nunca el mensaje: alcanza para diagnosticar y no arrastra nombres
         // de tabla ni de constraint a ningún lado.
@@ -653,7 +666,8 @@ export default function OnboardingPage() {
       // eso NO le pasamos email ni leadId). Best-effort: si falla, el negocio ya se creó; loguear y
       // seguir, NUNCA bloquear la salida del wizard (T-04-09).
       try {
-        await linkLeadOnSignup({ businessId: business.id })
+        // La server action no se cancela; sólo se le pone tope (si vence, cae en este mismo catch).
+        await enPlazo(() => linkLeadOnSignup({ businessId: business.id }))
       } catch (linkErr) {
         console.error('[onboarding/link-lead]', linkErr instanceof Error ? linkErr.message : linkErr)
       }
