@@ -103,6 +103,7 @@ export async function POST(request: Request) {
         business,
         {
           name: f.nombre,
+          last_name: f.apellido,
           phone: f.telefono,
           email: f.email,
           notes: f.notas,

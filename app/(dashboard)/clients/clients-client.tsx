@@ -150,7 +150,7 @@ const APPT_STATUS_LABEL: Record<string, string> = {
 // Contrato exacto: preview:{ total, importables, duplicadas, errores:[{row,error}] } / resumen:{…}.
 // `errores.error` es un código snake_case de validateClientBody — se traduce a copy con IMPORT_ROW_ERROR.
 interface ImportRowError { row: number; error: string }
-interface ImportPreviewRow { nombre: string; telefono: string | null; email: string | null }
+interface ImportPreviewRow { nombre: string; apellido?: string | null; telefono: string | null; email: string | null }
 interface ImportPreview { total: number; importables: number; duplicadas: number; errores: ImportRowError[]; filas: ImportPreviewRow[] }
 interface ImportResumen { importados: number; omitidos: number; fallidos: number }
 
@@ -500,7 +500,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
       if (!res.ok || !body?.ok || !body.preview) {
         // Header inválido → mensaje inline específico; el resto → toast genérico y quedarse en upload.
         if (body?.error === 'invalid_header') {
-          setImportFileError('El archivo no tiene el formato esperado. Bajá la plantilla o exportá tus clientes desde Forjo y usá ese archivo como base.')
+          setImportFileError('Al archivo le falta la columna Nombre, o una de Teléfono o Email. Bajá la plantilla y usala como base.')
         } else if (body?.error === 'file_too_large' || body?.error === 'invalid_file_type') {
           setImportFileError('Subí un archivo .xlsx o .csv de hasta 2 MB.')
         } else if (body?.error === 'unreadable_file') {
@@ -1408,7 +1408,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                       <TableBody>
                         {importPreview.filas.map((f, i) => (
                           <TableRow key={i}>
-                            <TableCell className="font-medium">{f.nombre}</TableCell>
+                            <TableCell className="font-medium">{clientFullName({ name: f.nombre, last_name: f.apellido })}</TableCell>
                             <TableCell className="text-muted-foreground">{f.telefono || '—'}</TableCell>
                             <TableCell className="text-muted-foreground">{f.email || '—'}</TableCell>
                           </TableRow>
@@ -1420,7 +1420,7 @@ export function ClientsClient({ initialClients, appointments: initialAppts, prof
                   <div className="sm:hidden max-h-[42vh] overflow-y-auto divide-y divide-border rounded-lg border border-border">
                     {importPreview.filas.map((f, i) => (
                       <div key={i} className="px-3 py-2">
-                        <p className="text-sm font-medium">{f.nombre}</p>
+                        <p className="text-sm font-medium">{clientFullName({ name: f.nombre, last_name: f.apellido })}</p>
                         <p className="text-xs text-muted-foreground">{[f.telefono, f.email].filter(Boolean).join(' · ') || '—'}</p>
                       </div>
                     ))}

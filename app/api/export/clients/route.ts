@@ -21,6 +21,8 @@ import { XLSX_CONTENT_TYPE, workbookToBytes } from '@/lib/xlsx-style'
 //     canonicalHeader, así el archivo exportado vuelve a entrar sin tocarlo.
 //   • `?plantilla=1` baja la plantilla de import (mismo builder, 0 filas + hoja Instrucciones) detrás
 //     del MISMO gate de sesión. El querystring no aporta tenant: solo elige qué archivo armar.
+//   • (quick 261124-lfd) Apellido después de Nombre; Origen al final como columna informativa (gris, con
+//     nota y lista desplegable). La plantilla no trae Origen.
 
 // La librería de planillas usa APIs de Node (streams, Buffer): el route handler no puede ir a Edge.
 // 'nodejs' ya es el default; se declara para que nadie lo mueva sin ver esto.
@@ -56,7 +58,7 @@ export async function GET(request: Request) {
   // TODAS las filas del negocio (no la página visible), filtradas por business_id de la sesión.
   const { data: clients } = await supabase
     .from('clients')
-    .select('name, phone, email, origin, notes, insurance_name, insurance_number')
+    .select('name, last_name, phone, email, origin, notes, insurance_name, insurance_number')
     .eq('business_id', business.id)
     .order('name', { ascending: true })
 

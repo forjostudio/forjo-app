@@ -11,25 +11,37 @@
 //     plantilla, Excel lo guardaría como número y se comería el cero inicial.
 //   • Un solo builder para el export y la plantilla (D-03): los títulos de la plantilla son los mismos
 //     que los del export, así que lo que el dueño baje de cualquiera de los dos vuelve a entrar.
+//   • Origen (quick 261124-lfd) va SOLO en el export, al final, marcada como columna del sistema:
+//     encabezado gris, nota «se ignora» y lista desplegable. La plantilla no la trae y el import la
+//     ignora siempre: así el que abre el Excel no piensa que es algo que tiene que completar.
 
 import ExcelJS from 'exceljs'
 import { styleHeaderSheet } from '@/lib/xlsx-style'
 // Sin ciclo: este módulo importa de clients-import, nunca al revés.
-import { CANONICAL_HEADER, canonicalHeader, parseCsv, type RawRow } from '@/lib/clients-import'
+import { CANONICAL_HEADER, canonicalHeader, isValidImportHeader, parseCsv, type RawRow } from '@/lib/clients-import'
 
 // ── Columnas ────────────────────────────────────────────────────────────────────────────────────
 
 // Orden canónico (el mismo que CANONICAL_HEADER de lib/clients-import.ts). `header` es el título
 // legible que ve el dueño (D-04); canonicalHeader(header) === key, así el import lo reconoce.
+// `informativa`: la columna la completa el sistema. Solo va en el export (al final, con nota y lista),
+// nunca en la plantilla, y el import la ignora. Hoy es solo Origen.
 export const CLIENTS_XLSX_COLUMNS = [
   { key: 'nombre', header: 'Nombre', width: 28 },
+  { key: 'apellido', header: 'Apellido', width: 24 },
   { key: 'telefono', header: 'Teléfono', width: 18, text: true },
   { key: 'email', header: 'Email', width: 32 },
-  { key: 'origen', header: 'Origen', width: 14 },
   { key: 'notas', header: 'Notas', width: 40 },
   { key: 'obra_social', header: 'Obra social', width: 22 },
   { key: 'nro_obra_social', header: 'Nro. obra social', width: 18, text: true },
+  { key: 'origen', header: 'Origen', width: 14, informativa: true },
 ] as const
+
+// Gris neutro para el encabezado de una columna informativa: la señal visual de «esto no lo completás
+// vos», distinta del rojo de marca de las columnas que el dueño sí carga.
+const INFO_HEADER_ARGB = 'FF7F7F7F'
+const ORIGEN_NOTE =
+  'Lo completa el sistema según cómo llegó el cliente: reserva, manual o importado. Es informativa: si volvés a importar este archivo, se ignora.'
 
 export const CLIENTS_SHEET = 'Clientes'
 export const INSTRUCTIONS_SHEET = 'Instrucciones'
@@ -37,6 +49,7 @@ export const INSTRUCTIONS_SHEET = 'Instrucciones'
 // La fila tal cual la devuelve el select de app/api/export/clients/route.ts.
 export interface ClientExportRow {
   name: string | null
+  last_name: string | null
   phone: string | null
   email: string | null
   origin: string | null
@@ -47,14 +60,17 @@ export interface ClientExportRow {
 
 // Las reglas reales del import (validateClientBody + classifyRows), en el idioma del dueño.
 const INSTRUCCIONES: [string, string][] = [
-  ['Nombre', 'Obligatorio.'],
+  ['Nombre', 'Obligatorio. El apellido va en su propia columna.'],
+  ['Apellido', 'Opcional.'],
   ['Teléfono', 'Teléfono o email: al menos uno de los dos. Solo números, espacios y + ( ) -.'],
   ['Email', 'Con formato nombre@dominio.com.'],
-  ['Origen', 'Se ignora al importar: todos quedan como Importado.'],
   ['Notas', 'Opcional. Se guardan hasta 1000 caracteres.'],
   ['Obra social', 'Opcional. Solo se guarda si el negocio es del rubro salud.'],
   ['Nro. obra social', 'Opcional. Solo se guarda si el negocio es del rubro salud.'],
-  ['Títulos', 'No cambies ni borres los títulos de la primera fila de la hoja Clientes.'],
+  [
+    'Columnas',
+    'Tienen que estar la columna Nombre y al menos una de Teléfono o Email, con esos títulos en la primera fila de la hoja Clientes. Las demás son opcionales. Las columnas que no reconocemos se ignoran, igual que la columna Origen del export: todo lo que importes queda como Importado.',
+  ],
   ['Repetidos', 'Las filas con el mismo email o teléfono que alguien que ya tenés (o repetidas en el archivo) se saltean.'],
   ['Límite', 'Máximo 2000 filas por archivo.'],
 ]
@@ -73,26 +89,51 @@ export function buildClientsWorkbook(
 ): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet(CLIENTS_SHEET)
-  ws.columns = CLIENTS_XLSX_COLUMNS.map((c) => ({ header: c.header, key: c.key, width: c.width }))
-  // Formato texto ANTES de cargar filas y de estilar el encabezado: las celdas nuevas lo heredan.
-  CLIENTS_XLSX_COLUMNS.forEach((c, i) => {
+  // La plantilla va sin las columnas informativas (Origen): el dueño no tiene nada que poner ahí.
+  const cols = CLIENTS_XLSX_COLUMNS.filter((c) => !(opts.plantilla && 'informativa' in c && c.informativa))
+  ws.columns = cols.map((c) => ({ header: c.header, key: c.key, width: c.width }))
+  // Formato texto ANTES de cargar filas y de estilar el encabezado: las celdas nuevas lo heredan. Por
+  // índice sobre la lista de ESTA hoja (la plantilla tiene una columna menos).
+  cols.forEach((c, i) => {
     if ('text' in c && c.text) ws.getColumn(i + 1).numFmt = '@'
   })
 
-  // La plantilla va sin filas de datos: ignora `rows` aunque venga algo.
+  // La plantilla va sin filas de datos: ignora `rows` aunque venga algo. Cada fila se agrega por key de
+  // columna, así una columna que la hoja no tiene no corre las demás.
   const data = opts.plantilla ? [] : rows
   for (const r of data) {
-    ws.addRow([
-      textCell(r.name),
-      textCell(r.phone),
-      textCell(r.email),
-      textCell(r.origin),
-      textCell(r.notes),
-      textCell(r.insurance_name),
-      textCell(r.insurance_number),
-    ])
+    ws.addRow({
+      nombre: textCell(r.name),
+      apellido: textCell(r.last_name),
+      telefono: textCell(r.phone),
+      email: textCell(r.email),
+      notas: textCell(r.notes),
+      obra_social: textCell(r.insurance_name),
+      nro_obra_social: textCell(r.insurance_number),
+      origen: textCell(r.origin),
+    })
   }
   styleHeaderSheet(ws, { autoFilter: true })
+
+  // Origen, solo en el export: encabezado gris + nota, y lista desplegable en cada celda de datos.
+  if (!opts.plantilla) {
+    const origenCol = cols.findIndex((c) => c.key === 'origen') + 1
+    if (origenCol > 0) {
+      const head = ws.getRow(1).getCell(origenCol)
+      head.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INFO_HEADER_ARGB } }
+      head.note = ORIGEN_NOTE
+      for (let r = 2; r <= ws.rowCount; r++) {
+        ws.getRow(r).getCell(origenCol).dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: ['"reserva,manual,importado"'],
+          showErrorMessage: true,
+          errorTitle: 'Origen',
+          error: 'Lo completa el sistema: reserva, manual o importado.',
+        }
+      }
+    }
+  }
 
   if (opts.plantilla) {
     const ins = wb.addWorksheet(INSTRUCTIONS_SHEET)
@@ -252,13 +293,13 @@ export async function parseClientsFile({
   if (ws.actualRowCount > maxRows + 1) return { ok: false, error: 'too_many_rows' }
 
   // Fila 1: columna → canónico. Si un canónico se repite, gana la primera columna. Las columnas que no
-  // son canónicas se ignoran (header rígido: las 7 tienen que estar, las extra no molestan).
+  // son canónicas se ignoran (alcanza con Nombre + Teléfono o Email; las extra no molestan).
   const colOf = new Map<CanonicalKey, number>()
   ws.getRow(1).eachCell((cell, col) => {
     const key = canonicalHeader(cellText(cell.value))
     if (isCanonicalKey(key) && !colOf.has(key)) colOf.set(key, col)
   })
-  if (!CANONICAL_HEADER.every((k) => colOf.has(k))) return { ok: true, validHeader: false, rows: [] }
+  if (!isValidImportHeader(colOf.keys())) return { ok: true, validHeader: false, rows: [] }
 
   // Filas de datos. NO se aplica unescapeFormulaGuard acá: classifyRows ya lo hace para los dos formatos.
   const rows: RawRow[] = []

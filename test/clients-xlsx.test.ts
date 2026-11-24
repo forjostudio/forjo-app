@@ -10,7 +10,7 @@ import {
   zipDeclaredSizeOk,
 } from '@/lib/clients-xlsx'
 import { workbookToBytes, BRAND_ARGB, WHITE_ARGB } from '@/lib/xlsx-style'
-import { canonicalHeader, classifyRows, parseCsv } from '@/lib/clients-import'
+import { canonicalHeader, classifyRows, isValidImportHeader, parseCsv } from '@/lib/clients-import'
 
 // ── Excel de clientes (quick 261124-ine) ────────────────────────────────────────────────────────
 // Suite PURA: no toca Supabase (no importa test/env), así cae en el carril `pure`. Todo se prueba
@@ -26,6 +26,7 @@ async function reload(bytes: Uint8Array<ArrayBuffer>): Promise<ExcelJS.Workbook>
 function row(partial: Partial<ClientExportRow>): ClientExportRow {
   return {
     name: null,
+    last_name: null,
     phone: null,
     email: null,
     origin: null,
@@ -36,10 +37,23 @@ function row(partial: Partial<ClientExportRow>): ClientExportRow {
   }
 }
 
-const HEADERS = ['Nombre', 'Teléfono', 'Email', 'Origen', 'Notas', 'Obra social', 'Nro. obra social']
+// Export (quick 261124-lfd): Apellido después de Nombre y Origen al final, como columna del sistema.
+const HEADERS = ['Nombre', 'Apellido', 'Teléfono', 'Email', 'Notas', 'Obra social', 'Nro. obra social', 'Origen']
+// Plantilla: lo mismo sin Origen.
+const TEMPLATE_HEADERS = HEADERS.filter((h) => h !== 'Origen')
+const ORIGEN_COL = HEADERS.indexOf('Origen') + 1
+
+// La nota de una celda recargada puede venir como string o como objeto con `texts`.
+function noteText(note: unknown): string {
+  if (typeof note === 'string') return note
+  if (note && typeof note === 'object' && 'texts' in note) {
+    return ((note as { texts: { text?: string }[] }).texts ?? []).map((t) => t.text ?? '').join('')
+  }
+  return ''
+}
 
 describe('buildClientsWorkbook — formato del export', () => {
-  it('una hoja Clientes con los 7 títulos legibles en orden', async () => {
+  it('una hoja Clientes con los 8 títulos legibles en orden (Apellido 2ª, Origen última)', async () => {
     const wb = await reload(await workbookToBytes(buildClientsWorkbook([row({ name: 'Ana', phone: '111' })])))
     expect(wb.worksheets.map((w) => w.name)).toEqual(['Clientes'])
     const ws = wb.getWorksheet('Clientes')!
@@ -57,12 +71,13 @@ describe('buildClientsWorkbook — formato del export', () => {
       const fill = cell.fill as ExcelJS.FillPattern
       expect(fill.type).toBe('pattern')
       expect(fill.pattern).toBe('solid')
-      expect(fill.fgColor?.argb).toBe(BRAND_ARGB)
+      // Nombre..Nro. obra social en rojo de marca; Origen (informativa) en gris neutro.
+      expect(fill.fgColor?.argb).toBe(c === ORIGEN_COL ? 'FF7F7F7F' : BRAND_ARGB)
       expect(cell.font?.bold).toBe(true)
       expect(cell.font?.color?.argb).toBe(WHITE_ARGB)
     }
-    // La celda 8 (fuera de la tabla) no se pinta: el estilo es por celda, no de la fila entera.
-    expect(ws.getRow(1).getCell(8).fill).toBeUndefined()
+    // La celda 9 (fuera de la tabla) no se pinta: el estilo es por celda, no de la fila entera.
+    expect(ws.getRow(1).getCell(9).fill).toBeUndefined()
     const view = ws.views[0] as ExcelJS.WorksheetViewFrozen
     expect(view.state).toBe('frozen')
     expect(view.ySplit).toBe(1)
@@ -107,9 +122,51 @@ describe('buildClientsWorkbook — formato del export', () => {
   it('null o "" → celda sin valor (nunca la cadena "null")', async () => {
     const wb = await reload(await workbookToBytes(buildClientsWorkbook([row({ name: 'Ana', phone: '', email: null })])))
     const ws = wb.getWorksheet('Clientes')!
-    expect(ws.getRow(2).getCell(2).value).toBeNull()
-    expect(ws.getRow(2).getCell(3).value).toBeNull()
+    expect(ws.getRow(2).getCell(2).value).toBeNull() // Apellido null
+    expect(ws.getRow(2).getCell(3).value).toBeNull() // Teléfono ''
+    expect(ws.getRow(2).getCell(4).value).toBeNull() // Email null
     ws.eachRow((r) => r.eachCell((c) => expect(c.value).not.toBe('null')))
+  })
+})
+
+describe('buildClientsWorkbook — Origen como columna informativa (solo export)', () => {
+  it('el encabezado de Origen tiene una nota que dice que se ignora', async () => {
+    const wb = await reload(await workbookToBytes(buildClientsWorkbook([row({ name: 'Ana', phone: '111', origin: 'manual' })])))
+    const ws = wb.getWorksheet('Clientes')!
+    const head = ws.getRow(1).getCell(ORIGEN_COL)
+    expect(head.value).toBe('Origen')
+    expect(noteText(head.note)).toContain('se ignora')
+  })
+
+  it('cada celda de datos de Origen tiene una lista desplegable reserva/manual/importado', async () => {
+    const wb = await reload(
+      await workbookToBytes(
+        buildClientsWorkbook([
+          row({ name: 'Ana', phone: '111', origin: 'reserva' }),
+          row({ name: 'Beto', phone: '222', origin: 'manual' }),
+          row({ name: 'Caro', phone: '333', origin: 'importado' }),
+        ]),
+      ),
+    )
+    const ws = wb.getWorksheet('Clientes')!
+    for (let r = 2; r <= 4; r++) {
+      const dv = ws.getRow(r).getCell(ORIGEN_COL).dataValidation
+      expect(dv?.type).toBe('list')
+      const formula = (dv?.formulae ?? []).join(',')
+      expect(formula).toContain('reserva')
+      expect(formula).toContain('manual')
+      expect(formula).toContain('importado')
+    }
+    // Las demás columnas no llevan validación.
+    expect(ws.getRow(2).getCell(1).dataValidation).toBeFalsy()
+  })
+
+  it('con 0 filas el export no se rompe y Origen sigue con su encabezado gris', async () => {
+    const wb = await reload(await workbookToBytes(buildClientsWorkbook([])))
+    const ws = wb.getWorksheet('Clientes')!
+    expect(ws.actualRowCount).toBe(1)
+    expect(ws.getRow(1).getCell(ORIGEN_COL).value).toBe('Origen')
+    expect((ws.getRow(1).getCell(ORIGEN_COL).fill as ExcelJS.FillPattern).fgColor?.argb).toBe('FF7F7F7F')
   })
 })
 
@@ -120,7 +177,9 @@ describe('buildClientsWorkbook — plantilla', () => {
     expect(wb.worksheets.map((w) => w.name)).toEqual(['Clientes', 'Instrucciones'])
     const ws = wb.getWorksheet('Clientes')!
     expect(ws.actualRowCount).toBe(1)
-    expect(HEADERS.map((_, i) => ws.getRow(1).getCell(i + 1).value)).toEqual(HEADERS)
+    // 7 títulos: sin Origen (D-12).
+    expect(TEMPLATE_HEADERS.map((_, i) => ws.getRow(1).getCell(i + 1).value)).toEqual(TEMPLATE_HEADERS)
+    expect(ws.getRow(1).getCell(TEMPLATE_HEADERS.length + 1).value).toBeNull()
     const fill = ws.getRow(1).getCell(1).fill as ExcelJS.FillPattern
     expect(fill.fgColor?.argb).toBe(BRAND_ARGB)
     expect((ws.views[0] as ExcelJS.WorksheetViewFrozen).ySplit).toBe(1)
@@ -133,7 +192,16 @@ describe('buildClientsWorkbook — plantilla', () => {
     ins.eachRow((r, n) => {
       if (n > 1) columnas.push(String(r.getCell(1).value))
     })
-    for (const h of HEADERS) expect(columnas).toContain(h)
+    for (const h of TEMPLATE_HEADERS) expect(columnas).toContain(h)
+    // Ninguna fila habla de una columna Origen; una fila Columnas explica las obligatorias.
+    expect(columnas).toContain('Apellido')
+    expect(columnas).not.toContain('Origen')
+    let reglaColumnas = ''
+    ins.eachRow((r) => {
+      if (String(r.getCell(1).value) === 'Columnas') reglaColumnas = String(r.getCell(2).value)
+    })
+    expect(reglaColumnas).toContain('Nombre')
+    expect(reglaColumnas).toContain('Teléfono o Email')
     // Sin ¿ ni ¡ de apertura (copy rioplatense del panel).
     ins.eachRow((r) => r.eachCell((c) => expect(String(c.value)).not.toMatch(/[¿¡]/)))
   })
@@ -151,6 +219,11 @@ describe('canonicalHeader — títulos legibles y snake_case caen en lo mismo', 
     ['Obra social', 'obra_social'],
     ['Email', 'email'],
     ['"nombre', 'nombre'],
+    ['Apellido', 'apellido'],
+    ['APELLIDO', 'apellido'],
+    [' apellido ', 'apellido'],
+    ['apellido', 'apellido'],
+    ['last_name', 'apellido'],
   ])('%j → %j', (input, expected) => {
     expect(canonicalHeader(input)).toBe(expected)
   })
@@ -169,9 +242,31 @@ describe('parseCsv — reconoce los títulos legibles del Excel', () => {
     expect(rows[0].telefono).toBe('1122334455')
   })
 
-  it('sin la columna Email → validHeader false (el header sigue rígido)', () => {
-    const csv = 'Nombre,Teléfono,Origen,Notas,Obra social,Nro. obra social\r\n"Ana","111","","","",""'
-    expect(parseCsv(csv).validHeader).toBe(false)
+  it('header válido = Nombre + (Teléfono o Email); el resto es opcional', () => {
+    expect(parseCsv('Nombre,Teléfono\r\n"Ana","111"').validHeader).toBe(true)
+    expect(parseCsv('Nombre,Email\r\n"Ana","a@t.com"').validHeader).toBe(true)
+    expect(parseCsv('Nombre\r\n"Ana"').validHeader).toBe(false)
+    expect(parseCsv('Teléfono,Email\r\n"111","a@t.com"').validHeader).toBe(false)
+  })
+
+  it('un CSV con header `nombre,last_name,telefono` puebla el apellido', () => {
+    const { validHeader, rows } = parseCsv('nombre,last_name,telefono\r\n"Ana","Pérez","111"')
+    expect(validHeader).toBe(true)
+    expect(rows[0].apellido).toBe('Pérez')
+  })
+})
+
+describe('isValidImportHeader', () => {
+  it.each<[string[], boolean]>([
+    [['nombre', 'telefono'], true],
+    [['nombre', 'email'], true],
+    [['nombre', 'apellido', 'telefono', 'email', 'notas', 'obra_social', 'nro_obra_social', 'origen'], true],
+    [['nombre'], false],
+    [['telefono', 'email'], false],
+    [['nombre', 'apellido', 'notas'], false],
+    [[], false],
+  ])('%j → %s', (fields, expected) => {
+    expect(isValidImportHeader(fields)).toBe(expected)
   })
 })
 
@@ -201,7 +296,8 @@ describe('parseClientsFile — ida y vuelta con el export', () => {
       await workbookToBytes(
         buildClientsWorkbook([
           row({
-            name: 'José Pérez',
+            name: 'José',
+            last_name: 'Pérez',
             phone: '+54 11 2233-4455',
             email: 'jose@test.com',
             origin: 'manual',
@@ -210,7 +306,8 @@ describe('parseClientsFile — ida y vuelta con el export', () => {
             insurance_number: '123',
           }),
           row({ name: '=Ana', email: 'ana@test.com' }),
-          row({ name: "O'Brien", phone: '0348 15 1234' }),
+          row({ name: "O'Brien", last_name: '=X', phone: '0348 15 1234' }),
+          row({ name: 'Dani', last_name: '   ', phone: '1199998888' }),
         ]),
       ),
     )
@@ -218,23 +315,63 @@ describe('parseClientsFile — ida y vuelta con el export', () => {
     expect(parsed.ok).toBe(true)
     if (!parsed.ok) return
     expect(parsed.validHeader).toBe(true)
-    expect(parsed.rows).toHaveLength(3)
+    expect(parsed.rows).toHaveLength(4)
 
     const { importables, errores, duplicadas } = classifyRows({ rows: parsed.rows, existing: [], business })
     expect(errores).toEqual([])
     expect(duplicadas).toBe(0)
     expect(importables).toEqual([
       {
-        nombre: 'José Pérez',
+        nombre: 'José',
+        apellido: 'Pérez',
         telefono: '+54 11 2233-4455',
         email: 'jose@test.com',
         notas: '=HYPERLINK("http://x")',
         obra_social: 'OSDE',
         nro_obra_social: '123',
       },
-      { nombre: '=Ana', telefono: null, email: 'ana@test.com', notas: null, obra_social: null, nro_obra_social: null },
-      { nombre: "O'Brien", telefono: '0348 15 1234', email: null, notas: null, obra_social: null, nro_obra_social: null },
+      { nombre: '=Ana', apellido: null, telefono: null, email: 'ana@test.com', notas: null, obra_social: null, nro_obra_social: null },
+      // `=X` vuelve como texto literal, sin fórmula.
+      { nombre: "O'Brien", apellido: '=X', telefono: '0348 15 1234', email: null, notas: null, obra_social: null, nro_obra_social: null },
+      // Un apellido de solo espacios → null.
+      { nombre: 'Dani', apellido: null, telefono: '1199998888', email: null, notas: null, obra_social: null, nro_obra_social: null },
     ])
+  })
+
+  it("una celda de Apellido `'=X` (tipeada por el dueño) también queda `=X`", async () => {
+    const bytes = await handWorkbook([
+      { name: 'Clientes', rows: [['Nombre', 'Apellido', 'Teléfono'], ['Ana', "'=X", '111']] },
+    ])
+    const parsed = await parseClientsFile({ name: 'x.xlsx', bytes, maxRows: 2000 })
+    if (!parsed.ok) throw new Error('no parseó')
+    expect(classifyRows({ rows: parsed.rows, existing: [], business }).importables[0].apellido).toBe('=X')
+  })
+
+  it('un Excel con el formato de la quick anterior (7 columnas, Origen 4ª, sin Apellido) entra igual', async () => {
+    const viejo = ['Nombre', 'Teléfono', 'Email', 'Origen', 'Notas', 'Obra social', 'Nro. obra social']
+    const bytes = await handWorkbook([
+      { name: 'Clientes', rows: [viejo, ['Ana Gómez', '111', 'ana@t.com', 'reserva', '', '', '']] },
+    ])
+    const parsed = await parseClientsFile({ name: 'clientes-viejo.xlsx', bytes, maxRows: 2000 })
+    expect(parsed.ok && parsed.validHeader).toBe(true)
+    if (!parsed.ok) return
+    const { importables } = classifyRows({ rows: parsed.rows, existing: [], business })
+    expect(importables).toHaveLength(1)
+    expect(importables[0].nombre).toBe('Ana Gómez')
+    expect(importables[0].apellido).toBeNull()
+  })
+
+  it("un Origen 'hackeado' entra igual y classifyRows no devuelve ningún campo de origen", async () => {
+    const bytes = ab(
+      await workbookToBytes(buildClientsWorkbook([row({ name: 'Ana', phone: '111', origin: 'hackeado' })])),
+    )
+    const parsed = await parseClientsFile({ name: 'x.xlsx', bytes, maxRows: 2000 })
+    if (!parsed.ok) throw new Error('no parseó')
+    expect(parsed.validHeader).toBe(true)
+    const { importables } = classifyRows({ rows: parsed.rows, existing: [], business })
+    expect(importables).toHaveLength(1)
+    expect(Object.keys(importables[0])).not.toContain('origen')
+    expect(Object.keys(importables[0])).not.toContain('origin')
   })
 
   it('la plantilla parsea con header válido y 0 filas (Instrucciones no se lee como datos)', async () => {
@@ -261,9 +398,26 @@ describe('parseClientsFile — headers', () => {
     expect(parsed.ok && parsed.validHeader).toBe(true)
   })
 
-  it('6 columnas (sin Email) → inválido', async () => {
-    const headers = ['Nombre', 'Teléfono', 'Origen', 'Notas', 'Obra social', 'Nro. obra social']
-    const bytes = await handWorkbook([{ name: 'Clientes', rows: [headers, ['Ana', '111', '', '', '', '']] }])
+  it('solo Nombre + Teléfono (sin el resto) → válido', async () => {
+    const bytes = await handWorkbook([{ name: 'Clientes', rows: [['Nombre', 'Teléfono'], ['Ana', '111']] }])
+    const parsed = await parseClientsFile({ name: 'x.xlsx', bytes, maxRows: 2000 })
+    expect(parsed).toEqual({ ok: true, validHeader: true, rows: [{ nombre: 'Ana', telefono: '111' }] })
+  })
+
+  it('solo Nombre + Email → válido', async () => {
+    const bytes = await handWorkbook([{ name: 'Clientes', rows: [['Nombre', 'Email'], ['Ana', 'a@t.com']] }])
+    const parsed = await parseClientsFile({ name: 'x.xlsx', bytes, maxRows: 2000 })
+    expect(parsed.ok && parsed.validHeader).toBe(true)
+  })
+
+  it('solo Nombre → inválido', async () => {
+    const bytes = await handWorkbook([{ name: 'Clientes', rows: [['Nombre', 'Notas'], ['Ana', 'x']] }])
+    const parsed = await parseClientsFile({ name: 'x.xlsx', bytes, maxRows: 2000 })
+    expect(parsed).toEqual({ ok: true, validHeader: false, rows: [] })
+  })
+
+  it('Teléfono + Email sin Nombre → inválido', async () => {
+    const bytes = await handWorkbook([{ name: 'Clientes', rows: [['Teléfono', 'Email'], ['111', 'a@t.com']] }])
     const parsed = await parseClientsFile({ name: 'x.xlsx', bytes, maxRows: 2000 })
     expect(parsed).toEqual({ ok: true, validHeader: false, rows: [] })
   })
@@ -449,9 +603,11 @@ describe('límites — filas y ZIP-bomba', () => {
   it('un libro real y un export de 2000 filas pasan el pre-chequeo', async () => {
     expect(zipDeclaredSizeOk(ab(await workbookToBytes(buildClientsWorkbook([row({ name: 'Ana' })]))))).toBe(true)
     const many = Array.from({ length: 2000 }, (_, i) =>
-      row({ name: `Cliente ${i}`, phone: `11 ${String(i).padStart(8, '0')}`, email: `c${i}@test.com`, notes: 'nota '.repeat(10) }),
+      row({ name: `Cliente ${i}`, last_name: `Apellido ${i}`, phone: `11 ${String(i).padStart(8, '0')}`, email: `c${i}@test.com`, notes: 'nota '.repeat(10), origin: 'reserva' }),
     )
     const big = ab(await workbookToBytes(buildClientsWorkbook(many)))
+    // Con la validación de lista en cada celda de Origen sigue entrando bajo el tope de subida (2 MB).
+    expect(big.byteLength).toBeLessThan(2 * 1024 * 1024)
     expect(zipDeclaredSizeOk(big)).toBe(true)
     const parsed = await parseClientsFile({ name: 'x.xlsx', bytes: big, maxRows: 2000 })
     expect(parsed.ok && parsed.rows).toHaveLength(2000)
