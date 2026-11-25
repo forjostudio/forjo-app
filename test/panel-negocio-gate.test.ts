@@ -13,6 +13,13 @@ import { join, relative, sep } from 'node:path'
 // EL ARREGLO que congela: todas esas lecturas pasan por `lib/negocio-del-dueno.ts` (`negocioDelPanel`
 // en las pantallas, `negocioDelDueno` donde hace falta otra política), que separa los tres casos.
 //
+// QUICK 261124-ubl lo extiende a `app/api/**`: las rutas del panel también resolvían el negocio con su
+// propio `.single()` (un dueño con dos negocios recibía 404 al crear un cliente, un turno, un abono…).
+// En una API se usa `negocioDelDueno` (discriminado: la API responde, no redirige), NUNCA
+// `negocioDelPanel`. Además del single, el gate de lectura de abajo impide cualquier lectura de
+// `businesses` por `owner_id` sin `id` fuera del helper (maybeSingle, limit, lo que sea): una resolución
+// propia puede elegir un negocio distinto del que muestra el panel.
+//
 // SUITE PURA: lee el fuente, no importa './env'. Molde: test/forms-no-get-leak.test.ts (de donde se
 // copian `sinComentarios`, el walker y `rutaPosix`).
 
@@ -49,8 +56,10 @@ function rutaPosix(abs: string): string {
  */
 const OWNER_ID_SINGLE = /\.eq\(\s*(['"`])owner_id\1\s*,[^)]*\)(?:\s*\.\w+\([^()]*\))*\s*\.single\(\s*\)/
 
+// Con `sinComentariosLexico` (definido abajo, quick 261124-ubl) y no con `sinComentarios`: la regex de
+// bloque de éste se come el código que sigue a un `/*` dentro de un comentario de línea.
 function usaSingleTrasOwnerId(src: string): boolean {
-  return OWNER_ID_SINGLE.test(sinComentarios(src))
+  return OWNER_ID_SINGLE.test(sinComentariosLexico(src))
 }
 
 /**
@@ -75,6 +84,26 @@ const ESPERADOS = [
   'app/(dashboard)/servicios/page.tsx',
   'app/(dashboard)/settings/page.tsx',
   'app/(dashboard)/web/page.tsx',
+  // Quick 261124-ubl: las rutas de app/api que resuelven el negocio del dueño de la sesión.
+  'app/api/abonos/cancel/route.ts',
+  'app/api/abonos/create/route.ts',
+  'app/api/appointments/cleanup-expired/route.ts',
+  'app/api/appointments/create/route.ts',
+  'app/api/appointments/delete/route.ts',
+  'app/api/clients/create/route.ts',
+  'app/api/export/clients/route.ts',
+  'app/api/export/finances/route.ts',
+  'app/api/google/callback/route.ts',
+  'app/api/google/disconnect/route.ts',
+  'app/api/google/sync/route.ts',
+  'app/api/import/clients/confirm/route.ts',
+  'app/api/import/clients/preview/route.ts',
+  'app/api/notify/cancel/route.ts',
+  'app/api/subscription/cancel/route.ts',
+  'app/api/subscription/create/route.ts',
+  'app/api/subscription/status/route.ts',
+  'app/api/mercadopago/disconnect/route.ts',
+  'app/api/mercadopago/callback/route.ts',
 ]
 
 /** Archivos que pueden seguir con el patrón, con el motivo. Sumar uno es una DECISIÓN, no un descuido. */
@@ -90,7 +119,9 @@ const PORQUE = [
   'dueño al wizard —que no verifica si ya hay negocio: la puerta a un segundo negocio— y un dueño con',
   'dos negocios no entra nunca (loop panel → wizard → integraciones → panel).',
   'ARREGLO: en una pantalla del panel usá `negocioDelPanel(supabase, user.id, <columnas>)` de',
-  '`@/lib/negocio-del-dueno`; donde haga falta otra política, `negocioDelDueno` (discriminado).',
+  '`@/lib/negocio-del-dueno`. En una ruta de app/api o una server action, `negocioDelDueno`',
+  '(discriminado: respondé con lo de siempre si no hay negocio y con un 500 si falló la lectura);',
+  'NUNCA `negocioDelPanel` en una API: redirige.',
 ].join('\n')
 
 describe('detector de `.eq(owner_id).single()` (fixtures)', () => {
@@ -123,20 +154,27 @@ describe('detector de `.eq(owner_id).single()` (fixtures)', () => {
   })
 })
 
-describe('el panel no resuelve el negocio con `.eq(owner_id).single()` (quick 261124-neg)', () => {
-  const archivos = [...fuentesDe(join(process.cwd(), 'app', '(dashboard)')), join(process.cwd(), 'app', 'page.tsx')]
+/** El barrido de los gates de resolución: el panel, `/` y las rutas de app/api (quick 261124-ubl). */
+function archivosDelPanel(): string[] {
+  const raiz = process.cwd()
+  return [
+    ...fuentesDe(join(raiz, 'app', '(dashboard)')),
+    ...fuentesDe(join(raiz, 'app', 'api')),
+    join(raiz, 'app', 'page.tsx'),
+  ]
+}
+
+describe('el panel no resuelve el negocio con `.eq(owner_id).single()` (quick 261124-neg, 261124-ubl)', () => {
+  const archivos = archivosDelPanel()
   const rutas = archivos.map(rutaPosix)
   const fuente = new Map(archivos.map((abs) => [rutaPosix(abs), read(abs)]))
 
-  it('el barrido ve los 16 archivos y cada uno usa el helper', () => {
+  it('el barrido ve los archivos esperados y cada uno usa el helper', () => {
     expect(rutas.length, 'el barrido no encontró NADA: está roto, no es que el panel esté limpio').toBeGreaterThan(0)
-    for (const esperado of ESPERADOS) {
-      expect(rutas, `el barrido ya no ve ${esperado}`).toContain(esperado)
-      expect(
-        /\bnegocioDel(?:Dueno|Panel)\(/.test(sinComentarios(fuente.get(esperado)!)),
-        `${esperado} no resuelve el negocio con negocioDelDueno/negocioDelPanel`,
-      ).toBe(true)
-    }
+    for (const esperado of ESPERADOS) expect(rutas, `el barrido ya no ve ${esperado}`).toContain(esperado)
+    // Se junta la lista entera (no corta en el primero) para que el rojo nombre a todos los que faltan.
+    const sinHelper = ESPERADOS.filter((r) => !/\bnegocioDel(?:Dueno|Panel)\(/.test(sinComentariosLexico(fuente.get(r)!)))
+    expect(sinHelper, `Archivos que no resuelven el negocio con negocioDelDueno/negocioDelPanel.\n${PORQUE}`).toEqual([])
   })
 
   it('ningún archivo vuelve a `.eq(owner_id).single()`', () => {
@@ -423,5 +461,52 @@ describe('ninguna mutación sobre `businesses` filtra por owner_id sin id (quick
   it('mutación sobre businesses por owner_id sin id', () => {
     const reincidentes = archivos.filter((abs) => mutaPorOwnerSinId(read(abs))).map(rutaPosix)
     expect(reincidentes, `Mutaciones sobre \`businesses\` filtradas sólo por owner_id.\n${PORQUE_MUTACION}`).toEqual([])
+  })
+})
+
+// ── Quick 261124-ubl — gate A de lectura: nadie resuelve el negocio por owner_id fuera del helper ─────
+//
+// El chequeo del single de arriba no ve una resolución propia con `maybeSingle`, `limit` o un array. Ésta
+// mira cualquier cadena de LECTURA sobre `businesses` filtrada por `owner_id` sin `id`: si no pasa por
+// `negocioDelDueno`, puede elegir un negocio distinto del que muestra el panel (o romperse con dos).
+
+/** Rutas que pueden seguir leyendo `businesses` por owner_id, con motivo y vigencia. Sumar una es una DECISIÓN. */
+const EXCEPCIONES_LECTURA: Record<string, string> = {
+  'app/api/abonos/cancel-link/[id]/route.ts':
+    'DC-6 (261124-ubl): ya elige el más viejo (order created_at + order id + limit(2)) y loguea el caso de ' +
+    '2+ negocios (WR-B1/B2). Migrarlo al helper perdería ese log. Vigencia: mientras conserve esa cadena.',
+  'app/(dashboard)/web/_landing-actions.ts': 'temporal: se migra en la Task 3 de 261124-ubl.',
+}
+
+describe('nadie lee `businesses` por owner_id sin id fuera del helper (quick 261124-ubl)', () => {
+  const archivos = archivosDelPanel()
+  const rutas = archivos.map(rutaPosix)
+  const fuente = new Map(archivos.map((abs) => [rutaPosix(abs), read(abs)]))
+  const lecturasPorOwner = (src: string) =>
+    cadenasSobreBusinesses(sinComentariosLexico(src)).filter((c) => !esMutacion(c) && filtraPorOwner(c) && !filtraPorId(c))
+
+  it('ninguna lectura propia por owner_id', () => {
+    const reincidentes = rutas.filter((r) => !(r in EXCEPCIONES_LECTURA) && lecturasPorOwner(fuente.get(r)!).length > 0)
+    expect(
+      reincidentes,
+      `Archivos que leen \`businesses\` por owner_id sin id, fuera de negocioDelDueno.
+${PORQUE}`,
+    ).toEqual([])
+  })
+
+  it('las excepciones de lectura siguen vigentes', () => {
+    for (const ruta of Object.keys(EXCEPCIONES_LECTURA)) {
+      expect(rutas, `la excepción ${ruta} ya no existe: sacala de EXCEPCIONES_LECTURA`).toContain(ruta)
+      expect(
+        lecturasPorOwner(fuente.get(ruta)!).length,
+        `${ruta} ya no lee por owner_id: sacala de EXCEPCIONES_LECTURA para que el gate la vuelva a cubrir`,
+      ).toBeGreaterThan(0)
+    }
+    // cancel-link: la vigencia es la cadena concreta (orden de alta + limit(2)), no cualquier lectura.
+    const cancelLink = lecturasPorOwner(fuente.get('app/api/abonos/cancel-link/[id]/route.ts')!)
+    expect(
+      cancelLink.some((c) => /\.order\(\s*'created_at'/.test(c) && /\.limit\(\s*2\s*\)/.test(c)),
+      'cancel-link ya no elige el más viejo con order created_at + limit(2): revisá la excepción DC-6',
+    ).toBe(true)
   })
 })

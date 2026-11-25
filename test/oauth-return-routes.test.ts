@@ -42,15 +42,16 @@ import { MP_ERROR_REASONS } from '@/lib/oauth-return'
 //
 // Opciones (quick 261124-obs): `updateError` es lo que devuelve el update de businesses (p. ej. el 23505
 // del índice de la 082) y `bizRead` lo que devuelve la lectura del negocio. El `eq` del select expone
-// `single` (el callback de Google lo sigue usando) Y la cadena `order → limit → maybeSingle` de
-// `negocioDelDueno` (el callback de MP); cada paso de la cadena queda registrado en `readChain`.
+// SÓLO la cadena `order → limit → maybeSingle` de `negocioDelDueno`, que usan los dos callbacks (MP desde
+// 261124-obs, Google desde 261124-ubl); cada paso queda registrado en `readChain`. No expone `single` a
+// propósito: una regresión al single de PostgREST tiene que tirar, no pasar en verde.
 type FakeOpts = {
   updateError?: { code: string; message: string } | null
   bizRead?: { data: unknown; error: { code: string; message: string } | null }
 }
 function fakeSupabase(opts: FakeOpts = {}) {
   const eqCalls: Array<{ op: 'select' | 'update'; args: unknown[] }> = []
-  const readChain: Array<{ step: 'order' | 'limit' | 'maybeSingle' | 'single'; args: unknown[] }> = []
+  const readChain: Array<{ step: 'order' | 'limit' | 'maybeSingle'; args: unknown[] }> = []
   const upserts: unknown[] = []
   const bizRead = opts.bizRead ?? { data: { id: 'biz-1' }, error: null }
   const client = {
@@ -62,10 +63,6 @@ function fakeSupabase(opts: FakeOpts = {}) {
             eq: vi.fn((...args: unknown[]) => {
               eqCalls.push({ op: 'select', args })
               return {
-                single: vi.fn(async () => {
-                  readChain.push({ step: 'single', args: [] })
-                  return bizRead
-                }),
                 order: vi.fn((...orderArgs: unknown[]) => {
                   readChain.push({ step: 'order', args: orderArgs })
                   return {
@@ -361,6 +358,36 @@ describe('Google callback', () => {
     expectDeleted(res, 'g_oauth_state')
     expectOwnerScoped(sb, ['select'])
     expect(sb.upserts).toEqual([{ business_id: 'biz-1', google_refresh_token: 'rt' }])
+  })
+
+  it('flujo sano → lee el negocio más viejo con maybeSingle, nunca con single (quick 261124-ubl)', async () => {
+    const sb = fakeSupabase()
+    h.createClientMock.mockResolvedValue(sb)
+    h.exchangeCodeMock.mockResolvedValue({ refresh_token: 'rt' })
+    const res = await googleCallback(req(G_CALLBACK, 'g_oauth_state=xyz'))
+
+    expect(dest(res)).toBe('/agenda?google=connected')
+    // Con el single de PostgREST, un dueño con dos negocios no podía conectar Google (2+ filas = error).
+    expect(sb.readChain).toEqual([
+      { step: 'order', args: ['created_at', { ascending: true }] },
+      { step: 'limit', args: [1] },
+      { step: 'maybeSingle', args: [] },
+    ])
+    expect(sb.upserts).toEqual([{ business_id: 'biz-1', google_refresh_token: 'rt' }])
+  })
+
+  it.each([
+    ['falla la lectura', { data: null, error: { code: 'PGRST000', message: 'boom' } }],
+    ['el dueño no tiene negocio', { data: null, error: null }],
+  ])('%s → /agenda?google=error sin upsert', async (_label, bizRead) => {
+    const sb = fakeSupabase({ bizRead })
+    h.createClientMock.mockResolvedValue(sb)
+    h.exchangeCodeMock.mockResolvedValue({ refresh_token: 'rt' })
+    const res = await googleCallback(req(G_CALLBACK, 'g_oauth_state=xyz'))
+
+    expect(dest(res)).toBe('/agenda?google=error')
+    expect(sb.upserts).toEqual([])
+    expectDeleted(res, 'g_oauth_state')
   })
 
   it('sin la cookie g_oauth_state → /onboarding/integraciones?google=error sin canjear el code', async () => {

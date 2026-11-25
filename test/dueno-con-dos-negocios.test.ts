@@ -30,6 +30,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 import { POST as disconnectMpPOST } from '@/app/api/mercadopago/disconnect/route'
+import { POST as createClientPOST } from '@/app/api/clients/create/route'
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -130,5 +131,26 @@ describe.skipIf(!hasSupabaseCreds)('dueño con dos negocios: las rutas actúan s
     const b = await estadoMp(seeded.bizB)
     expect(b.mp_user_id, 'el negocio de otro dueño no cambia').toBe(cuenta.b)
     expect(b.secretos?.mp_access_token).toBe(token.b)
+  })
+
+  it('POST /api/clients/create da de alta el cliente en el más viejo', async () => {
+    const nombre = `__test_ubl_${run}_cliente`
+    const res = await createClientPOST(
+      new Request('http://localhost/api/clients/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nombre, phone: '1155550000' }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true })
+
+    const creados = await seeded.admin.from('clients').select('business_id').eq('name', nombre)
+    if (creados.error) throw new Error(`check: leer clients falló: ${creados.error.code ?? creados.error.message}`)
+    expect(creados.data).toEqual([{ business_id: seeded.bizA }])
+
+    const enA2 = await seeded.admin.from('clients').select('id', { count: 'exact', head: true }).eq('business_id', bizA2)
+    if (enA2.error) throw new Error(`check: contar clients de bizA2 falló: ${enA2.error.code ?? enA2.error.message}`)
+    expect(enA2.count, 'el negocio más nuevo de A sigue sin clientes').toBe(0)
   })
 })
