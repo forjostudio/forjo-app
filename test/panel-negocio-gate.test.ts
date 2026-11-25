@@ -104,14 +104,16 @@ const ESPERADOS = [
   'app/api/subscription/status/route.ts',
   'app/api/mercadopago/disconnect/route.ts',
   'app/api/mercadopago/callback/route.ts',
+  // Quick 261124-ubl: las 3 server actions del CMS (fin de la excepción DC-5 de 261124-neg).
+  'app/(dashboard)/web/_landing-actions.ts',
 ]
 
-/** Archivos que pueden seguir con el patrón, con el motivo. Sumar uno es una DECISIÓN, no un descuido. */
-const EXCEPCIONES: Record<string, string> = {
-  'app/(dashboard)/web/_landing-actions.ts':
-    'server actions que devuelven { ok: false, error: "no_business" }: no mandan al wizard. Fuera de ' +
-    'scope del quick 261124-neg; follow-up anotado (un dueño con 2+ negocios recibe no_business).',
-}
+/**
+ * Archivos que pueden seguir con el patrón, con el motivo. Sumar uno es una DECISIÓN, no un descuido.
+ * VACÍO A PROPÓSITO desde el quick 261124-ubl: la última excepción (`_landing-actions.ts`) se migró al
+ * helper. El test de vigencia de abajo se queda para la próxima que alguien decida sumar.
+ */
+const EXCEPCIONES: Record<string, string> = {}
 
 const PORQUE = [
   'RIESGO: `.eq(\'owner_id\', …).single()` devuelve error con 0 filas, con 2+ filas (owner_id no es',
@@ -475,7 +477,6 @@ const EXCEPCIONES_LECTURA: Record<string, string> = {
   'app/api/abonos/cancel-link/[id]/route.ts':
     'DC-6 (261124-ubl): ya elige el más viejo (order created_at + order id + limit(2)) y loguea el caso de ' +
     '2+ negocios (WR-B1/B2). Migrarlo al helper perdería ese log. Vigencia: mientras conserve esa cadena.',
-  'app/(dashboard)/web/_landing-actions.ts': 'temporal: se migra en la Task 3 de 261124-ubl.',
 }
 
 describe('nadie lee `businesses` por owner_id sin id fuera del helper (quick 261124-ubl)', () => {
