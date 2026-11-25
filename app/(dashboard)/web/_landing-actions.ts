@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelDueno } from '@/lib/negocio-del-dueno'
 import { parseLandingConfigForWrite } from '@/lib/landing/write'
 
 // ── Server Actions OWNER-ONLY del CMS: guardar borrador / publicar / descartar (Phase 13 + 15) ─────
@@ -45,9 +46,10 @@ import { parseLandingConfigForWrite } from '@/lib/landing/write'
 //       acá el actor es el DUEÑO y el guard real es su sesión + la policy RLS `owner_id = auth.uid()`.
 //       Meter service-role en la superficie web de escritura re-abriría el riesgo de bypass de aislamiento
 //       que endureció v0.9 (threat T-13-02).
-//   (b) business_id de la SESIÓN, nunca del body: se resuelve con `.eq('owner_id', user.id).single()` y el
-//       .update apunta a `.eq('id', business.id)`. Un `business_id` que venga en `input` se IGNORA por
-//       construcción → un POST directo no puede escribir la fila de otro tenant (anti-tampering, T-13-01).
+//   (b) business_id de la SESIÓN, nunca del body: se resuelve con `negocioDelDueno(supabase, user.id, …)`
+//       (quick 261124-ubl) —el más viejo del dueño, el mismo que muestra el panel; con el single de antes
+//       un dueño con dos negocios recibía no_business— y el .update apunta a `.eq('id', business.id)`.
+//       Un `business_id` que venga en `input` se IGNORA por construcción → un POST directo no puede escribir la fila de otro tenant (anti-tampering, T-13-01).
 //   (c) GATE ÚNICO = ENTITLEMENT POR SESIÓN: retirado el kill-switch global de entorno, el add-on
 //       `has_web_custom` resuelto de la SESIÓN (owner_id = auth.uid()) queda como ÚNICO guard de
 //       escritura. Cada acción lo re-chequea (early-return not_entitled): un POST directo de un
@@ -83,12 +85,11 @@ export async function saveLandingDraft(input: unknown): Promise<Result> {
 
     // 4. Negocio resuelto de la SESIÓN (owner_id = auth.uid()), nunca de un business_id del body.
     //    Se trae has_web_custom en el MISMO select: es el entitlement del add-on de web (PUB-01).
-    const { data: business } = await supabase
-      .from('businesses')
-      .select('id, has_web_custom')
-      .eq('owner_id', user.id)
-      .single()
-    if (!business) return { ok: false, error: 'no_business' }
+    //    Falló la lectura ≠ no hay negocio: server_error, el código de infraestructura que el editor ya
+    //    traduce (DC-3 de 261124-ubl).
+    const negocio = await negocioDelDueno(supabase, user.id, 'id, has_web_custom')
+    if (!negocio.ok) return { ok: false, error: negocio.reason === 'sin-negocio' ? 'no_business' : 'server_error' }
+    const business = negocio.business
 
     // 4b. ENTITLEMENT (gate real, server-side): sin web a medida contratada, NO se escribe. Gatear
     //     solo la page sería cosmético — un POST directo a la action la saltearía. Acá se corta.
@@ -143,12 +144,11 @@ export async function publishLanding(): Promise<Result> {
 
     // 4. Negocio + entitlement + BORRADOR, todo en el MISMO select acotado a la SESIÓN. El business_id
     //    sale de acá (owner_id = auth.uid()), jamás de un body: no hay body (T-15-15).
-    const { data: business } = await supabase
-      .from('businesses')
-      .select('id, has_web_custom, landing_draft')
-      .eq('owner_id', user.id)
-      .single()
-    if (!business) return { ok: false, error: 'no_business' }
+    //    Falló la lectura ≠ no hay negocio: server_error, el código de infraestructura que el editor ya
+    //    traduce (DC-3 de 261124-ubl).
+    const negocio = await negocioDelDueno(supabase, user.id, 'id, has_web_custom, landing_draft')
+    if (!negocio.ok) return { ok: false, error: negocio.reason === 'sin-negocio' ? 'no_business' : 'server_error' }
+    const business = negocio.business
 
     // 4b. ENTITLEMENT (gate real, server-side): se chequea EN LA ACCIÓN, no solo en la page — gatear
     //     solo la page es cosmético, un POST directo la saltea (T-15-04).
@@ -207,12 +207,11 @@ export async function discardLandingDraft(): Promise<Result> {
     if (!user) return { ok: false, error: 'unauthorized' }
 
     // 4. Negocio + entitlement + LO PUBLICADO, en el MISMO select acotado a la sesión.
-    const { data: business } = await supabase
-      .from('businesses')
-      .select('id, has_web_custom, landing_config')
-      .eq('owner_id', user.id)
-      .single()
-    if (!business) return { ok: false, error: 'no_business' }
+    //    Falló la lectura ≠ no hay negocio: server_error, el código de infraestructura que el editor ya
+    //    traduce (DC-3 de 261124-ubl).
+    const negocio = await negocioDelDueno(supabase, user.id, 'id, has_web_custom, landing_config')
+    if (!negocio.ok) return { ok: false, error: negocio.reason === 'sin-negocio' ? 'no_business' : 'server_error' }
+    const business = negocio.business
 
     // 4b. ENTITLEMENT en la acción (T-15-04), igual que en las otras dos.
     if (!business.has_web_custom) return { ok: false, error: 'not_entitled' }
