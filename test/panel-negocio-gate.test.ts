@@ -21,17 +21,10 @@ import { join, relative, sep } from 'node:path'
 // propia puede elegir un negocio distinto del que muestra el panel.
 //
 // SUITE PURA: lee el fuente, no importa './env'. Molde: test/forms-no-get-leak.test.ts (de donde se
-// copian `sinComentarios`, el walker y `rutaPosix`).
+// copian el walker y `rutaPosix`; su `sinComentarios` por regex se reemplazó en 261124-ubl por
+// `sinComentariosLexico`, más abajo).
 
 const read = (rel: string) => readFileSync(rel, 'utf8')
-
-/** Borra comentarios JSX, de bloque y de línea, en ese orden. Copiado de forms-no-get-leak.test.ts. */
-function sinComentarios(src: string): string {
-  return src
-    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
-}
 
 /** Los .ts/.tsx bajo `dir` (sin tests). Walker copiado de forms-no-get-leak.test.ts. */
 function fuentesDe(dir: string, acc: string[] = []): string[] {
@@ -56,8 +49,9 @@ function rutaPosix(abs: string): string {
  */
 const OWNER_ID_SINGLE = /\.eq\(\s*(['"`])owner_id\1\s*,[^)]*\)(?:\s*\.\w+\([^()]*\))*\s*\.single\(\s*\)/
 
-// Con `sinComentariosLexico` (definido abajo, quick 261124-ubl) y no con `sinComentarios`: la regex de
-// bloque de éste se come el código que sigue a un `/*` dentro de un comentario de línea.
+// Con `sinComentariosLexico` (definido abajo, quick 261124-ubl) y no con el `sinComentarios` por regex de
+// forms-no-get-leak: su regex de bloque se come el código que sigue a un `/*` dentro de un comentario de
+// línea.
 function usaSingleTrasOwnerId(src: string): boolean {
   return OWNER_ID_SINGLE.test(sinComentariosLexico(src))
 }
@@ -263,7 +257,8 @@ function saltarGenerico(src: string, i: number): number {
 
 /**
  * Borra comentarios de línea y de bloque en UNA pasada, sabiendo si está dentro de un string. Hace falta
- * porque `sinComentarios` (de arriba) aplica primero la regex de bloque: un `/*` dentro de un comentario
+ * porque el `sinComentarios` por regex (el de forms-no-get-leak.test.ts, que este archivo usaba hasta
+ * 261124-ubl) aplica primero la regex de bloque: un `/*` dentro de un comentario
  * de línea (`// los endpoints /api/google/* …`, medido en settings-client.tsx) abre un «bloque» que se
  * come cientos de líneas de código hasta el próximo `*\/`, y el escáner deja de ver esas cadenas
  * (verde midiendo de menos). Un string con comilla simple o doble termina en el salto de línea aunque no
@@ -437,7 +432,7 @@ describe('anclas del escáner contra el código real (para que el barrido no mid
     expect(cadenasDe('app/api/subscription/create/route.ts').filter(esMutacion).length).toBeGreaterThanOrEqual(1)
   })
 
-  // Son 12 `.from('businesses')`, todos updates. Con `sinComentarios` el escáner veía 8: el `/*` del
+  // Son 12 `.from('businesses')`, todos updates. Con el `sinComentarios` por regex el escáner veía 8: el `/*` del
   // comentario de línea «/api/google/*» se comía el resto del archivo.
   it('settings-client tiene al menos 10 mutaciones', () => {
     expect(cadenasDe('app/(dashboard)/settings/settings-client.tsx').filter(esMutacion).length).toBeGreaterThanOrEqual(10)
