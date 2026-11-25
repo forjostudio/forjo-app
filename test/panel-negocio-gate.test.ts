@@ -154,3 +154,274 @@ describe('el panel no resuelve el negocio con `.eq(owner_id).single()` (quick 26
     }
   })
 })
+
+// ── Quick 261124-ubl — gate B: ninguna mutación sobre `businesses` filtra sólo por `owner_id` ─────────
+//
+// EL BUG QUE ESTE GATE IMPIDE QUE VUELVA. `app/api/mercadopago/disconnect/route.ts` hacía
+// `.from('businesses').update({ mp_user_id: null }).eq('owner_id', user.id)`. `owner_id` no es unique:
+// a un dueño con dos negocios, «desconectar MercadoPago» le desconectaba LOS DOS, aunque el panel le
+// muestra uno solo. Lo mismo vale para cualquier `.update/.delete/.upsert` sobre `businesses`.
+//
+// EL ARREGLO que congela: la mutación se acota por el `id` del negocio resuelto con `negocioDelDueno`,
+// y `owner_id` queda como defensa en profundidad (molde: app/api/mercadopago/callback/route.ts).
+//
+// POR QUÉ UN ESCÁNER Y NO UNA REGEX DE UNA LÍNEA (DC-7). Los payloads llevan paréntesis anidados
+// (`.update({ mp_user_id: String(x) })`). Una regex corta se trunca en el primer `)`: termina en rojo con
+// el código correcto, o en verde midiendo cero (trampa ya vista en este repo). `cadenasSobreBusinesses`
+// recorre la cadena con paréntesis balanceados y saltea los strings; los fixtures y las anclas sobre
+// archivos reales prueban que mide algo.
+//
+// LÍMITE CONOCIDO: una cadena armada en varias sentencias (`let q = sb.from('businesses').update(…);
+// q = q.eq('owner_id', …)`) no se detecta: el escáner sólo sigue una cadena de llamadas contigua.
+
+/** Saltea un literal de string que empieza en `i` (comilla simple, doble o backtick). Devuelve el índice siguiente. */
+function saltarString(src: string, i: number): number {
+  const comilla = src[i]
+  let j = i + 1
+  while (j < src.length) {
+    if (src[j] === '\\') { j += 2; continue }
+    if (src[j] === comilla) return j + 1
+    j++
+  }
+  return j
+}
+
+/** Desde un `(` en `i`, avanza hasta su `)` balanceado (salteando strings). Devuelve el índice siguiente, o -1. */
+function saltarParentesis(src: string, i: number): number {
+  let prof = 0
+  let j = i
+  while (j < src.length) {
+    const c = src[j]
+    if (c === "'" || c === '"' || c === '`') { j = saltarString(src, j); continue }
+    if (c === '(') prof++
+    else if (c === ')') {
+      prof--
+      if (prof === 0) return j + 1
+    }
+    j++
+  }
+  return -1
+}
+
+/** Desde un `<` en `i`, avanza hasta su `>` balanceado (genérico de TS). Devuelve el índice siguiente, o -1. */
+function saltarGenerico(src: string, i: number): number {
+  let prof = 0
+  let j = i
+  while (j < src.length) {
+    const c = src[j]
+    if (c === "'" || c === '"' || c === '`') { j = saltarString(src, j); continue }
+    if (c === '<') prof++
+    else if (c === '>') {
+      prof--
+      if (prof === 0) return j + 1
+    }
+    else if (c === ';') return -1 // un `<` que no era genérico: corta antes de comerse la sentencia siguiente
+    j++
+  }
+  return -1
+}
+
+/**
+ * Borra comentarios de línea y de bloque en UNA pasada, sabiendo si está dentro de un string. Hace falta
+ * porque `sinComentarios` (de arriba) aplica primero la regex de bloque: un `/*` dentro de un comentario
+ * de línea (`// los endpoints /api/google/* …`, medido en settings-client.tsx) abre un «bloque» que se
+ * come cientos de líneas de código hasta el próximo `*\/`, y el escáner deja de ver esas cadenas
+ * (verde midiendo de menos). Un string con comilla simple o doble termina en el salto de línea aunque no
+ * cierre: así un apóstrofo suelto en texto JSX desordena, como mucho, una línea.
+ */
+function sinComentariosLexico(src: string): string {
+  let out = ''
+  let i = 0
+  while (i < src.length) {
+    const c = src[i]
+    const d = src[i + 1]
+    if (c === "'" || c === '"' || c === '`') {
+      let j = i + 1
+      while (j < src.length) {
+        if (src[j] === '\\') { j += 2; continue }
+        if (src[j] === c) { j++; break }
+        if (src[j] === '\n' && c !== '`') break
+        j++
+      }
+      out += src.slice(i, j)
+      i = j
+    } else if (c === '/' && d === '/') {
+      while (i < src.length && src[i] !== '\n') i++
+    } else if (c === '/' && d === '*') {
+      const fin = src.indexOf('*/', i + 2)
+      i = fin < 0 ? src.length : fin + 2
+    } else {
+      out += c
+      i++
+    }
+  }
+  return out
+}
+
+const FROM_BUSINESSES = /\.from\(\s*(['"`])businesses\1\s*\)/g
+const ESPACIO = /\s/
+
+/**
+ * Cada cadena de llamadas que arranca en `.from('businesses')` (cualquier comilla), completa: desde el
+ * `.from(` hasta la última `.metodo(<args>)` contigua. Se aplica sobre el fuente YA sin comentarios
+ * (`sinComentariosLexico`).
+ */
+function cadenasSobreBusinesses(src: string): string[] {
+  const cadenas: string[] = []
+  for (const m of src.matchAll(FROM_BUSINESSES)) {
+    const inicio = m.index!
+    let pos = inicio + m[0].length
+    for (;;) {
+      let j = pos
+      while (j < src.length && ESPACIO.test(src[j])) j++
+      if (src[j] !== '.') break
+      j++
+      const id = /^[A-Za-z_$][\w$]*/.exec(src.slice(j))
+      if (!id) break
+      j += id[0].length
+      while (j < src.length && ESPACIO.test(src[j])) j++
+      if (src[j] === '<') {
+        const fin = saltarGenerico(src, j)
+        if (fin < 0) break
+        j = fin
+        while (j < src.length && ESPACIO.test(src[j])) j++
+      }
+      if (src[j] !== '(') break
+      const fin = saltarParentesis(src, j)
+      if (fin < 0) break
+      pos = fin
+    }
+    cadenas.push(src.slice(inicio, pos))
+  }
+  return cadenas
+}
+
+/** `.eq('owner_id', …)` (cualquier comilla) o `.match({ … owner_id … })`. */
+const filtraPorOwner = (c: string) =>
+  /\.eq\(\s*(['"`])owner_id\1/.test(c) || /\.match\(\s*\{[^}]*\bowner_id\b/.test(c)
+/** `.eq('id', …)` (cualquier comilla). */
+const filtraPorId = (c: string) => /\.eq\(\s*(['"`])id\1\s*,/.test(c)
+/** La cadena escribe: `.update(`, `.delete(` o `.upsert(`. */
+const esMutacion = (c: string) => /\.(?:update|delete|upsert)\s*\(/.test(c)
+
+/** El fuente tiene una mutación sobre `businesses` filtrada por `owner_id` sin `id`. */
+function mutaPorOwnerSinId(src: string): boolean {
+  return cadenasSobreBusinesses(sinComentariosLexico(src)).some((c) => esMutacion(c) && filtraPorOwner(c) && !filtraPorId(c))
+}
+
+const PORQUE_MUTACION = [
+  'RIESGO: un UPDATE/DELETE/UPSERT sobre `businesses` filtrado sólo por `owner_id` toca TODOS los',
+  'negocios del dueño (owner_id no es unique): a un dueño con dos negocios le cambia los dos, aunque el',
+  'panel le muestra uno solo.',
+  'ARREGLO: acotalo por el negocio resuelto con `negocioDelDueno` —`.eq(\'id\', <negocio>.id)`— y dejá',
+  '`.eq(\'owner_id\', user.id)` como defensa en profundidad (molde: app/api/mercadopago/callback/route.ts).',
+].join('\n')
+
+describe('escáner de cadenas sobre `businesses` (fixtures, quick 261124-ubl)', () => {
+  it.each([
+    [
+      'el disconnect viejo, multilínea',
+      `const { error: bizErr } = await supabase
+    .from('businesses')
+    .update({ mp_user_id: null })
+    .eq('owner_id', user.id)`,
+    ],
+    [
+      'payload con paréntesis anidados + select',
+      `await sb.from('businesses').update({ a: String(a), b: f(g(1)), c: ')' }).eq('owner_id', uid).select('id')`,
+    ],
+    ['delete por owner_id', `await sb.from('businesses').delete().eq('owner_id', uid)`],
+    ['update con match', `await sb.from('businesses').update({ x: 1 }).match({ owner_id: uid })`],
+    ['comillas dobles', `await sb.from("businesses").update({ x: 1 }).eq("owner_id", uid)`],
+    [
+      'después de un comentario de línea con /* adentro',
+      `// los endpoints /api/google/* comparten esto
+const a = 1
+await sb.from('businesses').delete().eq('owner_id', uid)
+/* fin */`,
+    ],
+  ])('da positivo: %s', (_label, src) => {
+    expect(mutaPorOwnerSinId(src)).toBe(true)
+  })
+
+  it.each([
+    [
+      'el update del callback de MP (id + owner_id)',
+      `await supabase
+    .from('businesses')
+    .update({
+      mp_user_id: tokens.user_id != null ? String(tokens.user_id) : null,
+      mp_connection_status: 'connected',
+    })
+    .eq('id', biz.id)
+    .eq('owner_id', user.id)`,
+    ],
+    ['update por id solo', `await sb.from('businesses').update({ x: 1 }).eq('id', business.id)`],
+    [
+      'upsert de business_secrets',
+      `await sb.from('business_secrets').upsert({ business_id: biz.id, mp_access_token: null }, { onConflict: 'business_id' }).eq('owner_id', uid)`,
+    ],
+    ['otra tabla por owner_id', `await sb.from('clients').update({ x: 1 }).eq('owner_id', uid)`],
+    [
+      'una lectura (no es mutación)',
+      `await sb.from('businesses').select(c).eq('owner_id', id).order('created_at', { ascending: true }).limit(1).maybeSingle()`,
+    ],
+    [
+      'la cadena vieja dentro de un comentario',
+      `// .from('businesses').update({ mp_user_id: null }).eq('owner_id', user.id)\n/* .from('businesses').delete().eq('owner_id', x) */`,
+    ],
+  ])('da negativo: %s', (_label, src) => {
+    expect(mutaPorOwnerSinId(src)).toBe(false)
+  })
+
+  it('devuelve la cadena entera, sin truncarse en los paréntesis del payload', () => {
+    const [c] = cadenasSobreBusinesses(`sb.from('businesses').update({ a: String(x) }).eq('id', b.id).eq('owner_id', u)`)
+    expect(c).toBe(`.from('businesses').update({ a: String(x) }).eq('id', b.id).eq('owner_id', u)`)
+  })
+})
+
+describe('anclas del escáner contra el código real (para que el barrido no mida cero)', () => {
+  const cadenasDe = (rel: string) => cadenasSobreBusinesses(sinComentariosLexico(read(rel)))
+
+  it('el callback de MP tiene una mutación con id y owner_id', () => {
+    const muts = cadenasDe('app/api/mercadopago/callback/route.ts').filter(esMutacion)
+    expect(muts.length).toBeGreaterThanOrEqual(1)
+    expect(muts.some((c) => filtraPorId(c) && filtraPorOwner(c))).toBe(true)
+  })
+
+  it('_landing-actions.ts tiene exactamente 3 mutaciones', () => {
+    expect(cadenasDe('app/(dashboard)/web/_landing-actions.ts').filter(esMutacion)).toHaveLength(3)
+  })
+
+  it('subscription/create tiene al menos una mutación', () => {
+    expect(cadenasDe('app/api/subscription/create/route.ts').filter(esMutacion).length).toBeGreaterThanOrEqual(1)
+  })
+
+  // Son 12 `.from('businesses')`, todos updates. Con `sinComentarios` el escáner veía 8: el `/*` del
+  // comentario de línea «/api/google/*» se comía el resto del archivo.
+  it('settings-client tiene al menos 10 mutaciones', () => {
+    expect(cadenasDe('app/(dashboard)/settings/settings-client.tsx').filter(esMutacion).length).toBeGreaterThanOrEqual(10)
+  })
+
+  it('el helper tiene una lectura por owner_id', () => {
+    const lecturas = cadenasDe('lib/negocio-del-dueno.ts').filter((c) => !esMutacion(c) && filtraPorOwner(c))
+    expect(lecturas.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('ninguna mutación sobre `businesses` filtra por owner_id sin id (quick 261124-ubl)', () => {
+  const raiz = process.cwd()
+  const archivos = ['app', 'lib', 'components', 'scripts'].flatMap((d) => fuentesDe(join(raiz, d)))
+  const rutas = archivos.map(rutaPosix)
+
+  it('el barrido ve app/, lib/, components/ y scripts/', () => {
+    for (const d of ['app/', 'lib/', 'components/', 'scripts/']) {
+      expect(rutas.some((r) => r.startsWith(d)), `el barrido no ve nada bajo ${d}`).toBe(true)
+    }
+  })
+
+  it('mutación sobre businesses por owner_id sin id', () => {
+    const reincidentes = archivos.filter((abs) => mutaPorOwnerSinId(read(abs))).map(rutaPosix)
+    expect(reincidentes, `Mutaciones sobre \`businesses\` filtradas sólo por owner_id.\n${PORQUE_MUTACION}`).toEqual([])
+  })
+})
