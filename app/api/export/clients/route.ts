@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelDueno } from '@/lib/negocio-del-dueno'
 import { buildClientsWorkbook } from '@/lib/clients-xlsx'
 import { XLSX_CONTENT_TYPE, workbookToBytes } from '@/lib/xlsx-style'
 
@@ -42,12 +43,15 @@ export async function GET(request: Request) {
 
   // Tenant = ACTOR: el negocio se resuelve por owner_id de la sesión, NUNCA por un id del
   // cliente / querystring (T-02-11).
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id, slug')
-    .eq('owner_id', user.id)
-    .single()
-  if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+  // negocioDelDueno (quick 261124-ubl) en vez del single de PostgREST: con dos negocios del mismo
+  // dueño el single daba error y la ruta respondía como si no tuviera negocio. Elige siempre el más
+  // viejo, el mismo que muestra el panel. «Falló la lectura» no es «no tenés negocio».
+  const negocio = await negocioDelDueno(supabase, user.id, 'id, slug')
+  if (!negocio.ok) {
+    if (negocio.reason === 'sin-negocio') return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+    return Response.json({ ok: false, error: 'read_failed' }, { status: 500 })
+  }
+  const business = negocio.business
 
   if (plantilla) {
     // La plantilla no lee ningún cliente.

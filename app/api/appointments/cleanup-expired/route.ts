@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelDueno } from '@/lib/negocio-del-dueno'
 
 // Limpieza manual de reservas con seña vencida/abandonada, disparada por el DUEÑO desde
 // Settings. Equivale a lo que hace el cron cancel-expired, pero acotado al negocio del
@@ -13,12 +14,15 @@ export async function POST() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return Response.json({ ok: false, error: 'No autenticado' }, { status: 401 })
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('owner_id', user.id)
-    .single()
-  if (!business) return Response.json({ ok: false, error: 'Sin negocio' }, { status: 403 })
+  // negocioDelDueno (quick 261124-ubl) en vez del single de PostgREST: con dos negocios del mismo
+  // dueño el single daba error y la ruta respondía como si no tuviera negocio. Elige siempre el más
+  // viejo, el mismo que muestra el panel. «Falló la lectura» no es «no tenés negocio».
+  const negocio = await negocioDelDueno(supabase, user.id, 'id')
+  if (!negocio.ok) {
+    if (negocio.reason === 'sin-negocio') return Response.json({ ok: false, error: 'Sin negocio' }, { status: 403 })
+    return Response.json({ ok: false, error: 'read_failed' }, { status: 500 })
+  }
+  const business = negocio.business
 
   const nowIso = new Date().toISOString()
   const hourAgoIso = new Date(Date.now() - 60 * 60 * 1000).toISOString()

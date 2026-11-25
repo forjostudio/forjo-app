@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelDueno } from '@/lib/negocio-del-dueno'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getEventStatuses } from '@/lib/google-calendar'
 import { sendBusinessCancelEmail, emailBrandInputs } from '@/lib/email'
@@ -15,14 +16,15 @@ export async function POST() {
 
   // El select de businesses ya NO trae secretos (resend_*/google_refresh_token viven en
   // business_secrets, migración 027). Solo columnas no secretas para armar el email.
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id, name, slug, palette, theme, font, landing_config, logo_url, whatsapp')
-    .eq('owner_id', user.id)
-    .single()
-  if (!business) {
-    return NextResponse.json({ ok: false, error: 'not_connected' }, { status: 400 })
+  // negocioDelDueno (quick 261124-ubl) en vez del single de PostgREST: con dos negocios del mismo
+  // dueño el single daba error y la ruta respondía como si no tuviera negocio. Elige siempre el más
+  // viejo, el mismo que muestra el panel. «Falló la lectura» no es «no tenés negocio».
+  const negocio = await negocioDelDueno(supabase, user.id, 'id, name, slug, palette, theme, font, landing_config, logo_url, whatsapp')
+  if (!negocio.ok) {
+    if (negocio.reason === 'sin-negocio') return NextResponse.json({ ok: false, error: 'not_connected' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'read_failed' }, { status: 500 })
   }
+  const business = negocio.business
 
   // Branding del mail desde la misma fuente de verdad que la página pública (paleta/override del
   // landing + fuente). Ya no se alimenta desde primary_color.

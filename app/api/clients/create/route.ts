@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelDueno } from '@/lib/negocio-del-dueno'
 import { validateClientBody, buildClientInsert } from '@/lib/clients-create'
 import { normalizeLastName } from '@/lib/client-name'
 
@@ -26,12 +27,15 @@ export async function POST(request: Request) {
 
   // Tenant = ACTOR: el negocio se resuelve por owner_id de la sesión, nunca por un id del body
   // (T-02-05). Traemos type/vertical para que resolveVertical decida el gate de obra social.
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id, type, vertical')
-    .eq('owner_id', user.id)
-    .single()
-  if (!business) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+  // negocioDelDueno (quick 261124-ubl) en vez del single de PostgREST: con dos negocios del mismo
+  // dueño el single daba error y la ruta respondía como si no tuviera negocio. Elige siempre el más
+  // viejo, el mismo que muestra el panel. «Falló la lectura» no es «no tenés negocio».
+  const negocio = await negocioDelDueno(supabase, user.id, 'id, type, vertical')
+  if (!negocio.ok) {
+    if (negocio.reason === 'sin-negocio') return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+    return Response.json({ ok: false, error: 'read_failed' }, { status: 500 })
+  }
+  const business = negocio.business
 
   // Parseo defensivo del body: no se confía en el shape del cliente (T-02-09).
   let raw: unknown

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelDueno } from '@/lib/negocio-del-dueno'
 import { exchangeCode } from '@/lib/google-calendar'
 import { GOOGLE_RETURN, oauthReturnPath, resolveOAuthReturn } from '@/lib/oauth-return'
 
@@ -35,12 +36,12 @@ export async function GET(request: NextRequest) {
   if (!tokens?.refresh_token) return fail()
 
   // Resolver el business_id del dueño para keyear business_secrets por business_id.
-  const { data: biz } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('owner_id', user.id)
-    .single()
-  if (!biz) return fail()
+  // negocioDelDueno (quick 261124-ubl) en vez del single de PostgREST: con dos negocios del mismo
+  // dueño el single daba error y la ruta respondía como si no tuviera negocio. Elige siempre el más
+  // viejo, el mismo que muestra el panel. «Falló la lectura» no es «no tenés negocio».
+  const negocio = await negocioDelDueno(supabase, user.id, 'id')
+  if (!negocio.ok) return fail()
+  const biz = negocio.business
 
   // google_refresh_token es secreto → va a business_secrets (migración 027), keyed por
   // business_id. El upsert del session client lo autoriza la policy owner-only (Pitfall F).

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelDueno } from '@/lib/negocio-del-dueno'
 import { revokeToken } from '@/lib/google-calendar'
 import { getBusinessSecrets } from '@/lib/business-secrets'
 
@@ -10,12 +11,15 @@ export async function POST() {
   if (!user) return NextResponse.json({ ok: false }, { status: 401 })
 
   // Resolver el business_id del dueño.
-  const { data: biz } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('owner_id', user.id)
-    .single()
-  if (!biz) return NextResponse.json({ ok: false }, { status: 404 })
+  // negocioDelDueno (quick 261124-ubl) en vez del single de PostgREST: con dos negocios del mismo
+  // dueño el single daba error y la ruta respondía como si no tuviera negocio. Elige siempre el más
+  // viejo, el mismo que muestra el panel. «Falló la lectura» no es «no tenés negocio».
+  const negocio = await negocioDelDueno(supabase, user.id, 'id')
+  if (!negocio.ok) {
+    if (negocio.reason === 'sin-negocio') return NextResponse.json({ ok: false }, { status: 404 })
+    return NextResponse.json({ ok: false, error: 'read_failed' }, { status: 500 })
+  }
+  const biz = negocio.business
 
   // El refresh token vive en business_secrets (027). Lo leemos server-side (service role) para
   // el revoke best-effort; nunca viaja al cliente.

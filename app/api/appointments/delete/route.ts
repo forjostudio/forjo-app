@@ -1,5 +1,6 @@
 import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { negocioDelDueno } from '@/lib/negocio-del-dueno'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getBusinessSecrets } from '@/lib/business-secrets'
 import { deleteCalendarEvent } from '@/lib/google-calendar'
@@ -39,12 +40,15 @@ export async function POST(request: Request) {
     const { data: { user } } = await ssr.auth.getUser()
     if (!user) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
 
-    const { data: ownedBusiness } = await ssr
-      .from('businesses')
-      .select('id')
-      .eq('owner_id', user.id)
-      .single()
-    if (!ownedBusiness) return Response.json({ ok: false, error: 'no_business' }, { status: 403 })
+    // negocioDelDueno (quick 261124-ubl) en vez del single de PostgREST: con dos negocios del mismo
+    // dueño el single daba error y la ruta respondía como si no tuviera negocio. Elige siempre el más
+    // viejo, el mismo que muestra el panel. «Falló la lectura» no es «no tenés negocio».
+    const negocio = await negocioDelDueno(ssr, user.id, 'id')
+    if (!negocio.ok) {
+      if (negocio.reason === 'sin-negocio') return Response.json({ ok: false, error: 'no_business' }, { status: 403 })
+      return Response.json({ ok: false, error: 'read_failed' }, { status: 500 })
+    }
+    const ownedBusiness = negocio.business
 
     const businessId = ownedBusiness.id as string
     const supabase = createAdminClient()
